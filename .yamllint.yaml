@@ -1,0 +1,29 @@
+---
+extends: "default"
+# Helm templates are Go templates, not YAML; the vendored subchart is not ours.
+ignore: |
+  templates/
+  charts/
+rules:
+  # Long CEL expressions in the Kyverno policies and generated comments are fine.
+  line-length: "disable"
+  document-start:
+    present: true
+  document-end:
+    present: true
+  # Every string value is double-quoted, so nothing is left to YAML's type guessing.
+  quoted-strings:
+    quote-type: "double"
+    required: true
+    # Values that contain double quotes may use single quotes instead of escaping.
+    allow-quoted-quotes: true
+  # Allow the empty-object/list shorthand used throughout values.yaml.
+  empty-values:
+    forbid-in-block-mappings: false
+    forbid-in-flow-mappings: false
+  truthy:
+    # GitHub Actions uses the bare `on:` key for triggers.
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+...

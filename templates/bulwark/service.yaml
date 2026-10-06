@@ -1,0 +1,26 @@
+{{- if .Values.webmail.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "stalwart.webmailFullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.webmailLabels" . | nindent 4 }}
+  annotations:
+    {{- include "stalwart.webmailAnnotations" (dict "specific" .Values.webmail.service.annotations "context" .) | nindent 4 }}
+spec:
+  type: {{ .Values.webmail.service.type }}
+  {{- with .Values.webmail.service.ipFamilyPolicy }}
+  ipFamilyPolicy: {{ . }}
+  {{- end }}
+  {{- with .Values.webmail.service.ipFamilies }}
+  ipFamilies:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- include "stalwart.webmailSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.webmail.service.port }}
+      targetPort: http
+{{- end }}

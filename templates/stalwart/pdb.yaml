@@ -1,0 +1,14 @@
+{{- if and .Values.pdb.create (gt (int (include "stalwart.effectiveMaxReplicas" .)) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "stalwart.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" . | nindent 4 }}
+spec:
+  {{- include "stalwart.pdbBudget" .Values.pdb | nindent 2 }}
+  selector:
+    matchLabels:
+      {{- include "stalwart.serverSelectorLabels" . | nindent 6 }}
+{{- end }}

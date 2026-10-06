@@ -1,0 +1,14 @@
+{{- if and .Values.webmail.enabled .Values.webmail.pdb.create (gt (int (include "stalwart.webmailEffectiveMaxReplicas" .)) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "stalwart.webmailFullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.webmailLabels" . | nindent 4 }}
+spec:
+  {{- include "stalwart.pdbBudget" .Values.webmail.pdb | nindent 2 }}
+  selector:
+    matchLabels:
+      {{- include "stalwart.webmailSelectorLabels" . | nindent 6 }}
+{{- end }}

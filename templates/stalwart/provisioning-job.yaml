@@ -1,0 +1,92 @@
+{{- if eq (include "stalwart.provisioningEnabled" .) "true" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "stalwart.fullname" . }}-provisioning
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" . | nindent 4 }}
+  annotations:
+    {{- with (omit .Values.additionalAnnotations "helm.sh/hook" "helm.sh/hook-delete-policy" "argocd.argoproj.io/hook" "argocd.argoproj.io/hook-delete-policy") }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    # Native Argo CD hooks, for when this chart is rendered with `helm
+    # template` and applied as plain manifests (e.g. a Kustomize/Directory
+    # Application) instead of Argo CD's own Helm source, which would
+    # otherwise translate the helm.sh/hook annotations above automatically.
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  activeDeadlineSeconds: {{ .Values.provisioning.activeDeadlineSeconds }}
+  backoffLimit: {{ .Values.provisioning.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.labels.standard" (dict "customLabels" (dict "app.kubernetes.io/name" (printf "%s-provisioning" (include "stalwart.name" .))) "context" .) | nindent 8 }}
+        app.kubernetes.io/component: provisioning
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.provisioning.image) "context" $) | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: apply
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.provisioning.image "global" .Values.global) | quote }}
+          imagePullPolicy: {{ .Values.provisioning.image.pullPolicy }}
+          command: [/usr/local/bin/stalwart-cli]
+          args: [apply, --file, /plan/plan.ndjson, --quiet]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          env:
+            - name: STALWART_URL
+              value: {{ printf "http://%s-management:%v" (include "stalwart.fullname" .) .Values.management.servicePort | quote }}
+            - name: STALWART_USER
+              value: {{ .Values.provisioning.username | quote }}
+            - name: STALWART_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.provisioning.existingSecret }}
+                  name: {{ .Values.provisioning.existingSecret | quote }}
+                  key: {{ .Values.provisioning.passwordSecretKey | quote }}
+                  {{- else }}
+                  name: {{ include "stalwart.fullname" . }}-env
+                  key: provisioningPassword
+                  {{- end }}
+            - name: XDG_CACHE_HOME
+              value: /cache
+          resources:
+            {{- toYaml .Values.provisioning.resources | nindent 12 }}
+          volumeMounts:
+            - name: plan
+              mountPath: /plan
+              readOnly: true
+            - name: cache
+              mountPath: /cache
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: plan
+          configMap:
+            name: {{ include "stalwart.fullname" . }}-provisioning
+        - name: cache
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+{{- end }}

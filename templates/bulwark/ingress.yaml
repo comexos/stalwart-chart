@@ -1,0 +1,30 @@
+{{- if .Values.webmail.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "stalwart.webmailFullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.webmailLabels" . | nindent 4 }}
+  annotations:
+    {{- include "stalwart.webmailAnnotations" (dict "specific" .Values.webmail.ingress.annotations "context" .) | nindent 4 }}
+spec:
+  {{- if .Values.webmail.ingress.className }}
+  ingressClassName: {{ .Values.webmail.ingress.className }}
+  {{- end }}
+  {{- if .Values.webmail.ingress.tls }}
+  tls:
+    {{- toYaml .Values.webmail.ingress.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ include "stalwart.webmailIngressHost" . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "stalwart.webmailFullname" . }}
+                port:
+                  name: http
+{{- end }}

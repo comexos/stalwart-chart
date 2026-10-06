@@ -1,0 +1,14 @@
+---
+# Single node, local storage: the only supported shape for RocksDB.
+dataStore:
+  backend: "rocksdb"
+blobStore:
+  backend: "existing"
+# Without provisioning credentials nothing is provisioned, console logging included.
+logging:
+  console:
+    enabled: false
+persistence:
+  enabled: true
+  size: "10Gi"
+...

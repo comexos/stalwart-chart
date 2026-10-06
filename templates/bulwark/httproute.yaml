@@ -1,0 +1,24 @@
+{{- if .Values.webmail.gatewayAPI.httpRoute.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "stalwart.webmailFullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.webmailLabels" . | nindent 4 }}
+  annotations:
+    {{- include "stalwart.webmailAnnotations" (dict "specific" .Values.webmail.gatewayAPI.httpRoute.annotations "context" .) | nindent 4 }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.webmail.gatewayAPI.httpRoute.parentRefs | nindent 4 }}
+  hostnames:
+    {{- include "stalwart.webmailGatewayHostnames" . | nindent 4 }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "stalwart.webmailFullname" . }}
+          port: {{ .Values.webmail.service.port }}
+{{- end }}

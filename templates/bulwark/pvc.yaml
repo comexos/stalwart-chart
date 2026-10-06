@@ -1,0 +1,16 @@
+{{- if and .Values.webmail.enabled .Values.webmail.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "stalwart.webmailFullname" . }}-data
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.webmailLabels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.webmail.persistence.accessMode | quote }}
+  {{- include "common.storage.class" (dict "persistence" .Values.webmail.persistence "global" .Values.global) | nindent 2 }}
+  resources:
+    requests:
+      storage: {{ .Values.webmail.persistence.size | quote }}
+{{- end }}

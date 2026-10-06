@@ -1,0 +1,110 @@
+{{- if .Values.certificateReload.enabled }}
+{{/* Stalwart reads certificate files only on startup or reload: a mounted
+     Secret renewed by cert-manager is not picked up until ReloadTlsCertificates. */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "stalwart.fullname" . }}-certificate-reload
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" . | nindent 4 }}
+  {{- with .Values.additionalAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  plan.ndjson: |
+    {{- dict "@type" "create" "object" "Action" "value" (dict "reload-tls" (dict "@type" "ReloadTlsCertificates")) | toJson | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "stalwart.fullname" . }}-certificate-reload
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" . | nindent 4 }}
+  {{- with .Values.additionalAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  schedule: {{ .Values.certificateReload.schedule | quote }}
+  {{- with .Values.certificateReload.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: {{ .Values.certificateReload.activeDeadlineSeconds }}
+      backoffLimit: {{ .Values.certificateReload.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "common.labels.standard" (dict "customLabels" (dict "app.kubernetes.io/name" (printf "%s-certificate-reload" (include "stalwart.name" .))) "context" .) | nindent 12 }}
+            app.kubernetes.io/component: certificate-reload
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.provisioning.image) "context" $) | nindent 10 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          {{- with .Values.nodeSelector }}
+          nodeSelector: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: reload
+              image: {{ include "common.images.image" (dict "imageRoot" .Values.provisioning.image "global" .Values.global) | quote }}
+              imagePullPolicy: {{ .Values.provisioning.image.pullPolicy }}
+              command: [/usr/local/bin/stalwart-cli]
+              args: [apply, --file, /plan/plan.ndjson, --quiet]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              env:
+                - name: STALWART_URL
+                  value: {{ printf "http://%s-management:%v" (include "stalwart.fullname" .) .Values.management.servicePort | quote }}
+                - name: STALWART_USER
+                  value: {{ .Values.provisioning.username | quote }}
+                - name: STALWART_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      {{- if .Values.provisioning.existingSecret }}
+                      name: {{ .Values.provisioning.existingSecret | quote }}
+                      key: {{ .Values.provisioning.passwordSecretKey | quote }}
+                      {{- else }}
+                      name: {{ include "stalwart.fullname" . }}-env
+                      key: provisioningPassword
+                      {{- end }}
+                - name: XDG_CACHE_HOME
+                  value: /cache
+              resources:
+                {{- toYaml .Values.certificateReload.resources | nindent 16 }}
+              volumeMounts:
+                - name: plan
+                  mountPath: /plan
+                  readOnly: true
+                - name: cache
+                  mountPath: /cache
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: plan
+              configMap:
+                name: {{ include "stalwart.fullname" . }}-certificate-reload
+            - name: cache
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
+{{- end }}
