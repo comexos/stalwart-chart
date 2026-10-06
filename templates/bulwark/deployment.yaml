@@ -1,0 +1,192 @@
+{{- if .Values.webmail.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stalwart.webmailFullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.webmailLabels" . | nindent 4 }}
+  {{- with .Values.webmail.additionalAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.webmail.autoscaling.enabled }}
+  replicas: {{ .Values.webmail.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "stalwart.webmailSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.labels.standard" (dict "customLabels" (merge (dict "app.kubernetes.io/component" "webmail") (merge (omit .Values.webmail.podLabels "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component") (omit .Values.webmail.additionalLabels "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component"))) "context" .) | nindent 8 }}
+      annotations:
+        {{- with (omit .Values.webmail.podAnnotations "checksum/secret") }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        checksum/secret: {{ include (print $.Template.BasePath "/bulwark/secret.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "stalwart.webmailServiceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.webmail.serviceAccount.automountServiceAccountToken }}
+      {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.webmail.image) "context" $) | nindent 6 }}
+      {{- if .Values.webmail.podSecurityContext.enabled }}
+      securityContext:
+        {{- omit .Values.webmail.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webmail.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.webmail.affinity }}
+      affinity:
+        {{- toYaml .Values.webmail.affinity | nindent 8 }}
+      {{- else if .Values.webmail.podAntiAffinityPreset }}
+      affinity:
+        podAntiAffinity:
+          {{- include (printf "common.affinities.pods.%s" .Values.webmail.podAntiAffinityPreset) (dict "component" "webmail" "context" $) | nindent 10 }}
+      {{- end }}
+      {{- with .Values.webmail.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: webmail
+          image: {{ include "stalwart.webmailImage" . | quote }}
+          imagePullPolicy: {{ .Values.webmail.image.pullPolicy }}
+          {{- if .Values.webmail.containerSecurityContext.enabled }}
+          securityContext:
+            {{- omit .Values.webmail.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          env:
+            - name: PORT
+              value: {{ .Values.webmail.service.port | quote }}
+            - name: JMAP_SERVER_URL
+              value: {{ include "stalwart.webmailJmapUrl" . | quote }}
+            {{- if .Values.webmail.appName }}
+            - name: APP_NAME
+              value: {{ .Values.webmail.appName | quote }}
+            {{- end }}
+            - name: STALWART_FEATURES
+              value: {{ .Values.webmail.stalwartFeatures | quote }}
+            - name: SETTINGS_SYNC_ENABLED
+              value: {{ .Values.webmail.settingsSync.enabled | quote }}
+            {{- if .Values.webmail.adminConfigReadonly }}
+            - name: ADMIN_CONFIG_READONLY
+              value: "true"
+            {{- end }}
+            {{- if not .Values.webmail.telemetry.enabled }}
+            - name: BULWARK_TELEMETRY
+              value: "off"
+            {{- end }}
+            {{- if or .Values.webmail.sessionSecret.existingSecret .Values.webmail.sessionSecret.value }}
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.webmail.sessionSecret.existingSecret }}
+                  name: {{ .Values.webmail.sessionSecret.existingSecret | quote }}
+                  key: {{ .Values.webmail.sessionSecret.secretKey | quote }}
+                  {{- else }}
+                  name: {{ include "stalwart.webmailFullname" . }}-env
+                  key: sessionSecret
+                  {{- end }}
+            {{- end }}
+            {{- if or .Values.webmail.adminPassword.existingSecret .Values.webmail.adminPassword.value }}
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.webmail.adminPassword.existingSecret }}
+                  name: {{ .Values.webmail.adminPassword.existingSecret | quote }}
+                  key: {{ .Values.webmail.adminPassword.secretKey | quote }}
+                  {{- else }}
+                  name: {{ include "stalwart.webmailFullname" . }}-env
+                  key: adminPassword
+                  {{- end }}
+            {{- end }}
+            {{- if .Values.webmail.oauth.enabled }}
+            - name: OAUTH_ENABLED
+              value: "true"
+            - name: OAUTH_ONLY
+              value: {{ .Values.webmail.oauth.only | quote }}
+            - name: AUTO_SSO_ENABLED
+              value: {{ .Values.webmail.oauth.autoSso | quote }}
+            - name: OAUTH_CLIENT_ID
+              value: {{ .Values.webmail.oauth.clientId | quote }}
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.webmail.oauth.existingSecret }}
+                  name: {{ .Values.webmail.oauth.existingSecret | quote }}
+                  key: {{ .Values.webmail.oauth.clientSecretKey | quote }}
+                  {{- else }}
+                  name: {{ include "stalwart.webmailFullname" . }}-env
+                  key: oauthClientSecret
+                  {{- end }}
+            {{- $issuerUrl := .Values.webmail.oauth.issuerUrl | default (and .Values.oidc.enabled .Values.oidc.issuerUrl) }}
+            {{- if $issuerUrl }}
+            - name: OAUTH_ISSUER_URL
+              value: {{ $issuerUrl | quote }}
+            {{- end }}
+            {{- if .Values.webmail.oauth.scopes }}
+            - name: OAUTH_SCOPES
+              value: {{ .Values.webmail.oauth.scopes | quote }}
+            {{- end }}
+            {{- if .Values.webmail.oauth.extraScopes }}
+            - name: OAUTH_EXTRA_SCOPES
+              value: {{ .Values.webmail.oauth.extraScopes | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.webmail.extraEnvVars }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- range $key, $value := .Values.webmail.extraEnv }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.webmail.service.port }}
+          {{- if .Values.webmail.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            {{- omit .Values.webmail.startupProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.webmail.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            {{- omit .Values.webmail.livenessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.webmail.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            {{- omit .Values.webmail.readinessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.webmail.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.webmail.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.webmail.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "stalwart.webmailFullname" . }}-data
+        {{- else }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.webmail.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

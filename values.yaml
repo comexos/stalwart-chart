@@ -1,0 +1,730 @@
+# Optional overrides shared with Bitnami Common image helpers.
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  # -- Default storage class when persistence.storageClass is unset.
+  defaultStorageClass: ""
+
+# -- Overrides the chart name used in resource names.
+nameOverride: ""
+# -- Overrides the full resource name. Use it to keep existing resource names when upgrading from another chart.
+fullnameOverride: ""
+
+# -- Convenience base domain: when set and ingress.hosts / webmail.ingress.host
+# are left at their defaults, they derive mail.<domain> and
+# webmail.<domain> respectively. Set either explicitly to override this,
+# or leave domain empty and set both explicitly yourself.
+domain: ""
+
+# -- Existing Secret containing environment variables; also accepts STALWART_RECOVERY_ADMIN.
+existingSecret: ""
+
+# Container image.
+image:
+  registry: docker.io
+  # -- Pinned to stalwartlabs/stalwart:v0.16.25 (multi-arch index digest).
+  # Takes precedence over tag; clear it to float on the tag instead.
+  # Refresh with: crane digest docker.io/stalwartlabs/stalwart:<tag>
+  digest: "sha256:74e5a7d55303ba525d939c6bf97ed4e010df7521f52d80afc22a815b66bd53f3"
+  pullSecrets: []
+  repository: stalwartlabs/stalwart
+  tag: "v0.16"
+  pullPolicy: Always
+
+# -- Number of pods in the StatefulSet.
+# Single-node deployments keep this at 1.
+# For a clustered deployment, raise this value and set `role` (and
+# `pushShard` where applicable) to a value that makes sense for the
+# whole StatefulSet, or install multiple releases of this chart with
+# different role values.
+replicaCount: 1
+
+# Scales replicaCount automatically instead of setting it statically.
+# Every replica still gets the same `role`/`pushShard` -- this scales a
+# homogeneous pool of general-purpose nodes, not differentiated cluster
+# roles; use separate releases for those, as above. Requires
+# resources.requests.cpu/memory to be set for the corresponding
+# utilization target to mean anything.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: ""
+  # -- Advanced: raw autoscaling/v2 metric entries, used instead of the two
+  # convenience targets above when non-empty.
+  metrics: []
+  behavior: {}
+
+# -- Maps to STALWART_ROLE. Names a ClusterRole defined in the database.
+# Leave empty on single-node installs to run every task and listener.
+# See /docs/cluster/configuration/roles for the role model.
+role: ""
+
+# -- Maps to STALWART_PUSH_SHARD. Only set on nodes whose role delivers
+# push notifications. Leave empty on single-node installs.
+pushShard: ""
+
+# Recovery / bootstrap administrator credential.
+# Supply this on first install to allow initial administrator sign-in.
+# Remove it once a permanent administrator account has been
+# provisioned through the setup wizard.
+recoveryAdmin:
+  enabled: false
+  username: admin
+  password: ""
+  # -- Preferred: key containing the complete username:password credential.
+  existingSecret: ""
+  secretKey: STALWART_RECOVERY_ADMIN
+
+# Starts the pods in recovery mode. Suspends mail services and
+# exposes only the management listener on the configured port.
+# See /docs/configuration/recovery-mode.
+recoveryMode:
+  enabled: false
+  port: 8080
+  logLevel: info
+
+# -- Extra environment variables injected into the container, for
+# store credentials that live in plain text.
+extraEnv: {}
+
+# -- Extra environment variables injected from the managed Secret.
+# Use this for anything sensitive (database passwords, S3 keys, etc.).
+extraSecretEnv: {}
+
+# Select the startup DataStore; server/blob settings still live in Stalwart's database.
+dataStore:
+  backend: postgresql # postgresql or rocksdb
+  rocksdb:
+    path: /var/lib/stalwart
+  postgresql:
+    host: ""
+    port: 5432
+    database: stalwart
+    username: stalwart
+    useTls: true
+    allowInvalidCerts: false
+    # -- Existing Secret containing the database password. Falls back to
+    # top-level existingSecret, then to the plain password below.
+    existingSecret: ""
+    passwordSecretKey: STALWART_DB_PASSWORD
+    # -- Fallback only, stored in a chart-managed Secret and visible in
+    # Helm's release history. Prefer existingSecret.
+    password: ""
+    poolMaxConnections: 10
+
+# S3 is the default BlobStore; supply its bucket and existing credential Secrets.
+# Select existing to preserve an externally configured BlobStore without provisioning.
+blobStore:
+  backend: s3 # s3 or existing
+  s3:
+    bucket: ""
+    # -- Stalwart region variant, e.g. EuCentral1. An endpoint selects Custom instead.
+    region: EuCentral1
+    endpoint: ""
+    customRegion: us-east-1
+    existingSecret: ""
+    accessKeySecretKey: accessKey
+    secretKeySecretKey: secretKey
+    # -- Fallback only, stored in a chart-managed Secret and visible in
+    # Helm's release history. Prefer existingSecret. Both are required
+    # together when existingSecret is not set.
+    accessKey: ""
+    secretKey: ""
+    keyPrefix: ""
+    verifyAfterWrite: true
+    allowInvalidCerts: false
+
+# Selecting S3 runs a post-install/post-upgrade CLI Job against management.
+provisioning:
+  image:
+    registry: ghcr.io
+    repository: stalwartlabs/cli
+    # -- Pinned to 1.0.13. Refresh with:
+    #   crane digest ghcr.io/stalwartlabs/cli:<tag>
+    tag: "1.0.13"
+    digest: "sha256:9a1e07307d6f890a193322c4b737fc0868405f0f8486a19922cbf362f43884fd"
+    pullPolicy: Always
+    pullSecrets: []
+  username: admin
+  # -- Password for an administrator already recognized by Stalwart.
+  existingSecret: ""
+  passwordSecretKey: password
+  # -- Fallback only, stored in a chart-managed Secret and visible in
+  # Helm's release history. Prefer existingSecret.
+  password: ""
+  activeDeadlineSeconds: 600
+  backoffLimit: 6
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# -- Advanced raw DataStore object. A nonempty object overrides dataStore selection.
+config: {}
+
+# Service definition. Change `type` to LoadBalancer when a cloud
+# load balancer should expose the mail ports directly, or keep it
+# as ClusterIP and front the chart with an Ingress / gateway for
+# the HTTP listeners only.
+service:
+  enabled: true
+  annotations: {}
+  # -- Preserve source IPs when supported by the load balancer.
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges: []
+  # -- Dual-stack: SingleStack, PreferDualStack or RequireDualStack. Empty
+  # leaves the cluster default. ipFamilies (IPv4/IPv6, in order) with two
+  # entries requires a *DualStack policy.
+  ipFamilyPolicy: ""
+  ipFamilies: []
+  type: ClusterIP
+  # Service ports map to named container ports. Match containerPort to Stalwart listeners.
+  ports:
+    smtp:
+      port: 25
+      containerPort: 25
+      protocol: TCP
+    smtps:
+      port: 465
+      containerPort: 465
+      protocol: TCP
+    submission:
+      port: 587
+      containerPort: 587
+      protocol: TCP
+    imap:
+      port: 143
+      containerPort: 143
+      protocol: TCP
+    imaps:
+      port: 993
+      containerPort: 993
+      protocol: TCP
+    pop3:
+      port: 110
+      containerPort: 110
+      protocol: TCP
+    pop3s:
+      port: 995
+      containerPort: 995
+      protocol: TCP
+    sieve:
+      port: 4190
+      containerPort: 4190
+      protocol: TCP
+    http:
+      port: 80
+      containerPort: 80
+      protocol: TCP
+    https:
+      port: 443
+      containerPort: 443
+      protocol: TCP
+
+
+# Ingress for the HTTP / HTTPS listeners only. Mail protocols
+# require L4 exposure and are not handled here.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # -- Defaults to a single "mail.<domain>" host (HTTPS, path /) when
+  # empty and top-level domain is set. Set this explicitly to override
+  # that default or to declare more than one host.
+  hosts: []
+  tls: []
+
+# Routes attach to existing Gateways; install Gateway API CRDs and a controller first.
+gatewayAPI:
+  httpRoute:
+    enabled: false
+    annotations: {}
+    # -- Each reference names a Gateway; namespace and sectionName are optional.
+    parentRefs: []
+    hostnames: []
+    # -- Plain HTTP upstream; terminate client TLS on the Gateway's HTTPS listener.
+    backendPortName: http
+    paths:
+      - type: PathPrefix
+        value: /
+  # -- Use v1alpha2 for older experimental-channel TCPRoute CRDs.
+  tcpRouteApiVersion: gateway.networking.k8s.io/v1
+  # -- Keys refer to service.ports entries, with a Gateway TCP listener per mail port.
+  # tcpRoutes:
+  #   smtp:
+  #     parentRefs:
+  #       - name: mail-gateway
+  #         sectionName: smtp
+  #     annotations: {}
+  tcpRoutes: {}
+
+# Persistent volume for the data directory. Required when the
+# DataStore is a local backend such as RocksDB. Can be disabled
+# for deployments that use an external store (PostgreSQL, MySQL,
+# FoundationDB, S3-backed blob store, etc.).
+persistence:
+  # -- Disabled for external PostgreSQL/S3; enable for local durable stores.
+  enabled: false
+  accessMode: ReadWriteOnce
+  # -- Empty uses the cluster default; "-" explicitly requests no storage class.
+  storageClass: ""
+  size: 20Gi
+
+# Starting requests for a small installation; tune using observed usage.
+# No CPU limit by default to avoid throttling mail processing.
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+# Pod-level security context. Non-root UID/GID 2000 with RuntimeDefault seccomp by default; set `enabled: false` to omit it entirely.
+podSecurityContext:
+  enabled: true
+  fsGroup: 2000
+  fsGroupChangePolicy: OnRootMismatch
+  runAsUser: 2000
+  runAsGroup: 2000
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context. Read-only root filesystem, no privilege escalation, all capabilities dropped except NET_BIND_SERVICE (needed for privileged mail ports). Set `enabled: false` to omit it entirely.
+containerSecurityContext:
+  enabled: true
+  allowPrivilegeEscalation: false
+  privileged: false
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+    add: [NET_BIND_SERVICE]
+
+# -- Metadata is merged without changing immutable selector labels.
+additionalLabels: {}
+additionalAnnotations: {}
+# -- Extra labels on the mail pods. Selector labels are reserved and cannot be overridden.
+podLabels: {}
+# -- Extra annotations on the mail pods. `checksum/config` and `checksum/secret` are reserved.
+podAnnotations: {}
+
+# Dedicated ServiceAccount. API token automounting is off, and the chart grants no RBAC.
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  labels: {}
+  automountServiceAccountToken: false
+
+# Always internal, independently of the mail Service's type.
+management:
+  port: 8080
+  servicePort: 8080
+  annotations: {}
+
+# Prometheus scraping for Stalwart's built-in exporter, served on the
+# internal management listener at metrics.path. `enabled` also drives
+# the provisioning Job (see below) so the exporter is actually turned
+# on inside Stalwart; `serviceMonitor.enabled` additionally renders a
+# Prometheus Operator ServiceMonitor. Both flags are independent so an
+# existing scrape setup can be reused.
+metrics:
+  enabled: false
+  path: /metrics/prometheus
+  # -- Reapplies the Metrics singleton on every install/upgrade via the
+  # same CLI apply Job used for S3 provisioning. Disable if the
+  # Prometheus exporter is already configured through the WebUI/CLI.
+  provision: true
+  # Optional Basic auth for the exporter. An internal Service alone does
+  # not restrict which cluster workloads can access metrics.
+  auth:
+    username: ""
+    existingSecret: ""
+    passwordSecretKey: password
+    # -- Fallback only, stored in a chart-managed Secret and visible in
+    # Helm's release history. Prefer existingSecret.
+    password: ""
+  serviceMonitor:
+    enabled: false
+    # -- Defaults to the release namespace; override to place the
+    # ServiceMonitor in a central monitoring namespace instead.
+    namespace: ""
+    additionalLabels: {}
+    annotations: {}
+    interval: 30s
+    scrapeTimeout: ""
+    honorLabels: false
+    relabelings: []
+    metricRelabelings: []
+
+# Server-wide message encryption at rest (per-account OpenPGP/S-MIME).
+# Both values already match Stalwart's own defaults, so this is purely
+# an explicit, auditable declaration -- it changes nothing on a server
+# that hasn't touched these settings. Actual protection still depends
+# on each account having a registered public key; that is a mailbox
+# administration task and out of scope for this chart.
+email:
+  # -- Encrypts messages delivered via SMTP/LMTP before they're written
+  # to disk, for any recipient with a registered key.
+  encryptAtRest: true
+  # -- Also encrypt client-appended (IMAP/JMAP) messages server-wide,
+  # overriding any per-account preference. Off by default so clients
+  # keep control, matching Stalwart's own default.
+  encryptOnAppend: false
+  # -- Off by default: flipping it on reapplies the Email singleton via
+  # the same CLI apply Job used for blobStore/metrics, which requires
+  # provisioning credentials even if nothing else needs the Job.
+  provision: false
+
+# Delegates authentication to a third-party OpenID Connect provider
+# (e.g. Keycloak). This is a resource-server integration: Stalwart
+# validates bearer tokens against the provider's discovery document
+# and JWKS, so no client secret is needed. OIDC cannot look up or
+# auto-provision accounts -- matching Stalwart accounts must already
+# exist (matched by claimUsername); provisioning them is out of scope
+# for this chart.
+oidc:
+  enabled: false
+  # -- Short label. Also used as the Directory object's natural key
+  # (its "description" field), so re-applying doesn't create
+  # duplicates, and as the CLI-apply cross-reference for activate.
+  name: keycloak
+  issuerUrl: ""
+  requireAudience: "stalwart"
+  # -- A list here; rendered into Stalwart's object-of-true Set encoding.
+  requireScopes:
+    - openid
+    - email
+  claimUsername: preferred_username
+  # -- Domain appended to claimUsername values that don't already contain "@".
+  usernameDomain: ""
+  claimName: name
+  claimGroups: ""
+  # -- Activates this directory server-wide via the Authentication
+  # singleton's directoryId, replacing the internal directory for
+  # every protocol (IMAP, POP3, SMTP, JMAP) -- not only WebUI/JMAP --
+  # since Stalwart has no per-protocol override. Stalwart's
+  # documentation does not confirm whether local/admin login keeps a
+  # fallback once this is set. Verify WebUI/admin access still works
+  # in a non-production environment before enabling this; leaving it
+  # false only declares the Directory object without switching any
+  # authentication over to it.
+  activate: false
+
+# Cluster coordination between replicas (mailbox updates, IMAP IDLE/push,
+# blocked-IP and certificate events). Not needed for a single replica; with
+# several, one of these must be configured. type "" (default) leaves the
+# Coordinator singleton untouched, e.g. because it is set up in the WebUI.
+# Otherwise it is applied on every install/upgrade by the provisioning Job
+# (which then needs provisioning credentials). The chart does not deploy any
+# coordinator: run NATS (plain pub/sub, no JetStream) with its own chart.
+#   nats  -- medium clusters; lower latency and simpler than Kafka (recommended)
+#   redis -- small/medium, mainly when Redis is already in use
+#   kafka -- very large deployments
+#   zenoh -- peer-to-peer, no extra service; needs a Stalwart build with the
+#            zenoh feature (not in the default build per Stalwart's docs) and
+#            multicast discovery rarely works on Kubernetes, so give it an
+#            explicit-endpoints config
+coordinator:
+  type: ""
+  nats:
+    addresses: []
+    useTls: false
+    authUsername: stalwart
+    existingSecret: ""
+    passwordSecretKey: password
+    # -- Fallback only, stored in a chart-managed Secret and visible in Helm's
+    # release history. Prefer existingSecret. Leave both empty for no auth.
+    password: ""
+  # Stalwart's plain Redis variant has no credential field: a password in the
+  # URL would be stored in Stalwart's database in clear text.
+  redis:
+    url: ""
+  kafka:
+    brokers: []
+    groupId: stalwart
+  zenoh:
+    config: ""
+
+# Bulwark (https://bulwarkmail.org): an optional, separate JMAP
+# webmail client deployed alongside Stalwart as its own Deployment.
+# Disabled by default. Mailbox authentication uses the JMAP server (Stalwart),
+# either via basic auth/app passwords or, if webmail.oauth.enabled,
+# via its own browser OAuth redirect flow.
+webmail:
+  enabled: false
+
+  image:
+    registry: ghcr.io
+    # -- Pinned to ghcr.io/bulwarkmail/webmail:1.12.0 (tag and digest).
+    # The digest takes precedence; clear it to float on the tag. Refresh with:
+    #   crane digest ghcr.io/bulwarkmail/webmail:<tag>
+    digest: "sha256:31bb0f105d784a6ca953625e14b65a1d1dc3e7a96ba1a17643d472f40324227d"
+    pullSecrets: []
+    repository: bulwarkmail/webmail
+    tag: "1.12.0"
+    pullPolicy: IfNotPresent
+
+  # -- Multiple replicas require a pinned adminPassword and shared sessionSecret.
+  # Use ReadWriteMany persistence, or disable persistence and settingsSync.
+  # Without persistence, config and audit data are local to each replica.
+  replicaCount: 1
+
+  # Scales replicaCount automatically; the same replicaCount caveats above
+  # still apply to whatever value it settles on between min/max. Requires
+  # resources.requests.cpu/memory for the utilization targets to mean
+  # anything.
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: ""
+    metrics: []
+    behavior: {}
+
+  # -- Browser-reachable JMAP URL. Empty falls back to the internal mail Service;
+  # set a public URL for access from outside the cluster.
+  jmapServerUrl: ""
+  appName: ""
+  # -- Enables Stalwart-specific WebUI features (password change, Sieve
+  # management, vacation responder, account security, API keys, admin
+  # dashboard). Matches Bulwark's own default.
+  stalwartFeatures: true
+
+  # Encrypts persistent sessions, settings sync, multi-account state,
+  # and server-side OAuth PKCE state. Required for anything beyond
+  # basic, non-persistent login, including admin dashboard login. Required
+  # explicitly for multiple replicas (also autoscaling.maxReplicas > 1).
+  # Use the same secret on every replica, at least 32 characters long;
+  # existing Secret contents must satisfy this too.
+  # Generate with: openssl rand -base64 32
+  sessionSecret:
+    existingSecret: ""
+    secretKey: SESSION_SECRET
+    # -- Fallback only, stored in a chart-managed Secret and visible in
+    # Helm's release history. Prefer existingSecret.
+    value: ""
+  # Needs real shared storage to be useful across restarts/replicas;
+  # requires persistence.enabled.
+  settingsSync:
+    enabled: false
+
+  # Explicit password for Bulwark's local admin dashboard, separate from
+  # Stalwart accounts. Required by the chart when scaling above one replica.
+  # Dashboard sessions also require sessionSecret.
+  adminPassword:
+    existingSecret: ""
+    secretKey: ADMIN_PASSWORD
+    value: ""
+
+  # OAuth2/OIDC login for Bulwark's own browser redirect flow. This is
+  # a DIFFERENT integration than the top-level `oidc` block: `oidc`
+  # lets Stalwart validate bearer tokens from clients that already
+  # have one; this lets Bulwark itself send users to the identity
+  # provider to obtain one. The two are commonly pointed at the same
+  # Keycloak realm but need their own registered OAuth client
+  # (clientId/clientSecret) in Keycloak, distinct from Stalwart's
+  # client-secret-free resource-server integration.
+  oauth:
+    enabled: false
+    # -- Defaults to the top-level oidc.issuerUrl when unset and oidc.enabled.
+    issuerUrl: ""
+    # -- Hides the username/password form, making OAuth the only login method.
+    only: false
+    # -- Starts the OAuth redirect automatically with no user interaction.
+    # Requires only: true.
+    autoSso: false
+    clientId: ""
+    existingSecret: ""
+    clientSecretKey: OAUTH_CLIENT_SECRET
+    # -- Fallback only, stored in a chart-managed Secret. Prefer existingSecret.
+    clientSecret: ""
+    scopes: ""
+    extraScopes: ""
+
+  # Disable Bulwark telemetry. This does not disable other outbound traffic.
+  telemetry:
+    enabled: true
+
+  service:
+    type: ClusterIP
+    port: 3000
+    annotations: {}
+    # -- See the top-level service.ipFamilyPolicy.
+    ipFamilyPolicy: ""
+    ipFamilies: []
+
+  # Bulwark's NEXT_PUBLIC_BASE_PATH is a build-time setting baked into
+  # the published image's static assets, so it cannot be safely
+  # reconfigured at runtime -- serve it from a dedicated host, not a
+  # path prefix behind an existing Ingress or Gateway.
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    # -- Defaults to "webmail.<domain>" when empty and top-level domain
+    # is set; required explicitly otherwise.
+    host: ""
+    tls: []
+
+  # Route attaches to an existing Gateway instead of an Ingress
+  # controller; install Gateway API CRDs and a controller first. Not
+  # mutually exclusive with `ingress` above, but normally only one is
+  # needed.
+  gatewayAPI:
+    httpRoute:
+      enabled: false
+      annotations: {}
+      # -- Each reference names a Gateway; namespace and sectionName are optional.
+      parentRefs: []
+      # -- Defaults to a single "webmail.<domain>" hostname when empty and
+      # top-level domain is set; required explicitly otherwise.
+      hostnames: []
+
+  # Persistent volume for /app/data (settings, admin config/state, and
+  # telemetry state). Disabling loses admin dashboard config, settings
+  # sync data, and local admin credentials/audit log on pod replacement --
+  # each replica also gets its own independent copy rather than a
+  # shared one. See replicaCount's comment for when that's fine.
+  persistence:
+    enabled: false
+    accessMode: ReadWriteOnce
+    storageClass: ""
+    size: 2Gi
+
+  # -- Prevent admin config writes. Requires a pre-seeded admin.json;
+  # otherwise Bulwark cannot bootstrap the dashboard password.
+  adminConfigReadonly: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+  podSecurityContext:
+    enabled: true
+    # -- The published image's non-root user; adjust if a custom image
+    # uses a different UID/GID.
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    runAsUser: 1000
+    runAsGroup: 1000
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    enabled: true
+    allowPrivilegeEscalation: false
+    privileged: false
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    automountServiceAccountToken: false
+
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 0
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+    successThreshold: 1
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 0
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+
+  additionalLabels: {}
+  additionalAnnotations: {}
+  podLabels: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  # -- Explicit affinity always wins over podAntiAffinityPreset below.
+  affinity: {}
+  # -- Spreads replicas across nodes when affinity is left empty: "", "soft",
+  # or "hard" -- see the top-level podAntiAffinityPreset for details.
+  podAntiAffinityPreset: ""
+  tolerations: []
+  # -- Extra environment variables for anything not exposed as its own
+  # value above (branding, PWA icons, cookie/CSP settings, logging,
+  # locale, etc.) -- see bulwarkmail.org's environment reference.
+  extraEnv: {}
+  extraEnvVars: []
+  extraVolumes: []
+  extraVolumeMounts: []
+
+# Startup probe on `/healthz/live` of the management port. Allows up to ten minutes of startup before liveness checks begin.
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 60
+  successThreshold: 1
+# Liveness probe on `/healthz/live` of the management port.
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+# Readiness probe on `/healthz/ready` of the management port.
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# -- Seconds the pod gets to shut down cleanly. Stalwart needs time to drain connections.
+terminationGracePeriodSeconds: 60
+# -- OrderedReady starts/stops pods one at a time, each waiting for readiness
+# (the startup probe allows up to ten minutes), so an HPA scale-up is
+# serial. Parallel starts them together; with an external DataStore and
+# no per-replica local state that is safe and much faster to scale.
+# Immutable on an existing StatefulSet -- changing it on a live release
+# means deleting the StatefulSet (e.g. --cascade=orphan) and upgrading.
+podManagementPolicy: OrderedReady
+# StatefulSet update strategy. Rolling updates by default.
+updateStrategy:
+  type: RollingUpdate
+# -- Node selector for the mail StatefulSet.
+nodeSelector: {}
+# -- Explicit affinity always wins over podAntiAffinityPreset below.
+affinity: {}
+# -- Spreads replicas across nodes when affinity is left empty: "", "soft"
+# (preferred, default topologyKey kubernetes.io/hostname), or "hard"
+# (required -- extra unschedulable replicas rather than co-located ones).
+podAntiAffinityPreset: ""
+# -- Tolerations for the mail StatefulSet.
+tolerations: []
+# -- Topology spread constraints for the mail StatefulSet. Use for zone-level spreading; `podAntiAffinityPreset` only covers nodes.
+topologySpreadConstraints: []
+# -- Extra environment variables for the mail container, as full Kubernetes `env` entries (for example `valueFrom.secretKeyRef`).
+extraEnvVars: []
+# -- Extra volumes for the mail pod, for example a mounted certificate or a writable path for custom logging.
+extraVolumes: []
+# -- Mounts for `extraVolumes` in the mail container.
+extraVolumeMounts: []
+# -- Lifecycle hooks for the mail container.
+lifecycleHooks: {}

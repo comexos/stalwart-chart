@@ -1,0 +1,18 @@
+Stalwart Helm chart
+Copyright 2026 Thomas Kaltenstein (Sovereign Systems)
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This chart bundles the following third-party software in charts/:
+
+  Bitnami Common (common-2.41.0.tgz)
+    Copyright Broadcom, Inc. All Rights Reserved.
+    Licensed under the Apache License, Version 2.0.
+    https://github.com/bitnami/charts/tree/main/bitnami/common
+
+This chart deploys, but does not include or modify, the following separately
+licensed software; their licences apply to those programs, not to this chart:
+
+  Stalwart Mail Server (stalwartlabs/stalwart) - GNU AGPL v3 or Stalwart
+    Enterprise License v2
+  Bulwark Webmail (bulwarkmail/webmail) - GNU AGPL v3

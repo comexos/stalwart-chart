@@ -1,0 +1,32 @@
+# Create the referenced Secrets in the release namespace before installing.
+existingSecret: stalwart-admin
+
+dataStore:
+  backend: postgresql
+  postgresql:
+    host: postgres.database.svc.cluster.local
+    database: stalwart
+    username: stalwart
+    existingSecret: stalwart-postgresql
+    passwordSecretKey: password
+    useTls: true
+
+persistence:
+  enabled: false
+
+blobStore:
+  backend: s3
+  s3:
+    bucket: stalwart-mail
+    region: EuCentral1
+    existingSecret: stalwart-s3
+    accessKeySecretKey: accessKey
+    secretKeySecretKey: secretKey
+    # For MinIO/other S3-compatible services, set both:
+    # endpoint: https://minio.storage.svc.cluster.local:9000
+    # customRegion: us-east-1
+
+provisioning:
+  username: admin
+  existingSecret: stalwart-admin
+  passwordSecretKey: password

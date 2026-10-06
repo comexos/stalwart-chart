@@ -1,0 +1,241 @@
+{{- include "stalwart.validateValues" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "stalwart.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" . | nindent 4 }}
+  {{- with .Values.additionalAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  updateStrategy: {{- toYaml .Values.updateStrategy | nindent 4 }}
+  serviceName: {{ include "stalwart.fullname" . }}-headless
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "stalwart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.labels.standard" (dict "customLabels" (merge (omit .Values.podLabels "app.kubernetes.io/name" "app.kubernetes.io/instance") (omit .Values.additionalLabels "app.kubernetes.io/name" "app.kubernetes.io/instance")) "context" .) | nindent 8 }}
+      annotations:
+        {{- with (omit .Values.podAnnotations "checksum/config" "checksum/secret") }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        checksum/config: {{ include (print $.Template.BasePath "/stalwart/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/stalwart/secret.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "stalwart.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.image) "context" $) | nindent 6 }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext:
+        {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else if .Values.podAntiAffinityPreset }}
+      affinity:
+        podAntiAffinity:
+          {{- include (printf "common.affinities.pods.%s" .Values.podAntiAffinityPreset) (dict "context" $) | nindent 10 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: stalwart
+          image: {{ include "stalwart.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.containerSecurityContext.enabled }}
+          securityContext:
+            {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          args:
+            - "--config"
+            - "/etc/stalwart/config.json"
+          env:
+            {{- if and .Values.recoveryAdmin.enabled .Values.recoveryAdmin.existingSecret }}
+            - name: STALWART_RECOVERY_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.recoveryAdmin.existingSecret | quote }}
+                  key: {{ .Values.recoveryAdmin.secretKey | quote }}
+            {{- end }}
+            {{- if and .Values.metrics.enabled (or .Values.metrics.auth.existingSecret .Values.metrics.auth.password) }}
+            - name: STALWART_METRICS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.metrics.auth.existingSecret }}
+                  name: {{ .Values.metrics.auth.existingSecret | quote }}
+                  key: {{ .Values.metrics.auth.passwordSecretKey | quote }}
+                  {{- else }}
+                  name: {{ include "stalwart.fullname" . }}-env
+                  key: metricsPassword
+                  {{- end }}
+            {{- end }}
+            {{- if and (eq .Values.coordinator.type "nats") (or .Values.coordinator.nats.existingSecret .Values.coordinator.nats.password) }}
+            - name: STALWART_NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.coordinator.nats.existingSecret }}
+                  name: {{ .Values.coordinator.nats.existingSecret | quote }}
+                  key: {{ .Values.coordinator.nats.passwordSecretKey | quote }}
+                  {{- else }}
+                  name: {{ include "stalwart.fullname" . }}-env
+                  key: natsPassword
+                  {{- end }}
+            {{- end }}
+            {{- if eq .Values.blobStore.backend "s3" }}
+            - name: STALWART_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.blobStore.s3.existingSecret }}
+                  name: {{ .Values.blobStore.s3.existingSecret | quote }}
+                  key: {{ .Values.blobStore.s3.accessKeySecretKey | quote }}
+                  {{- else }}
+                  name: {{ include "stalwart.fullname" . }}-env
+                  key: s3AccessKey
+                  {{- end }}
+            - name: STALWART_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.blobStore.s3.existingSecret }}
+                  name: {{ .Values.blobStore.s3.existingSecret | quote }}
+                  key: {{ .Values.blobStore.s3.secretKeySecretKey | quote }}
+                  {{- else }}
+                  name: {{ include "stalwart.fullname" . }}-env
+                  key: s3SecretKey
+                  {{- end }}
+            {{- end }}
+            {{- if and (not .Values.config) (eq .Values.dataStore.backend "postgresql") }}
+            {{- $pgSecret := default .Values.existingSecret .Values.dataStore.postgresql.existingSecret }}
+            - name: STALWART_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if $pgSecret }}
+                  name: {{ $pgSecret | quote }}
+                  key: {{ .Values.dataStore.postgresql.passwordSecretKey | quote }}
+                  {{- else }}
+                  name: {{ include "stalwart.fullname" . }}-env
+                  key: postgresPassword
+                  {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnvVars }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if .Values.role }}
+            - name: STALWART_ROLE
+              value: {{ .Values.role | quote }}
+            {{- end }}
+            {{- if .Values.pushShard }}
+            - name: STALWART_PUSH_SHARD
+              value: {{ .Values.pushShard | quote }}
+            {{- end }}
+            {{- if .Values.recoveryMode.enabled }}
+            - name: STALWART_RECOVERY_MODE
+              value: "true"
+            - name: STALWART_RECOVERY_MODE_PORT
+              value: {{ .Values.recoveryMode.port | quote }}
+            - name: STALWART_RECOVERY_MODE_LOG_LEVEL
+              value: {{ .Values.recoveryMode.logLevel | quote }}
+            {{- end }}
+            {{- range $key, $value := .Values.extraEnv }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- if or (and .Values.recoveryAdmin.enabled (not .Values.recoveryAdmin.existingSecret)) .Values.extraSecretEnv .Values.existingSecret }}
+          envFrom:
+            {{- if or (and .Values.recoveryAdmin.enabled (not .Values.recoveryAdmin.existingSecret)) .Values.extraSecretEnv }}
+            - secretRef:
+                name: {{ include "stalwart.fullname" . }}-env
+            {{- end }}
+            {{- with .Values.existingSecret }}
+            - secretRef:
+                name: {{ . | quote }}
+            {{- end }}
+          {{- end }}
+          ports:
+            {{- range $name, $port := .Values.service.ports }}
+            - name: {{ $name }}
+              containerPort: {{ $port.containerPort }}
+              protocol: {{ $port.protocol }}
+            {{- end }}
+            - name: mgmt
+              containerPort: {{ include "stalwart.managementPort" . }}
+          {{- with .Values.lifecycleHooks }}
+          lifecycle: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /healthz/live
+              port: mgmt
+            {{- omit .Values.startupProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: mgmt
+            {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: mgmt
+            {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/stalwart/config.json
+              subPath: config.json
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /var/lib/stalwart
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "stalwart.fullname" . }}-config
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode | quote }}
+        {{- include "common.storage.class" (dict "persistence" .Values.persistence "global" .Values.global) | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+  {{- end }}

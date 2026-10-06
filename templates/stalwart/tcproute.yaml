@@ -1,0 +1,19 @@
+{{- range $name, $route := .Values.gatewayAPI.tcpRoutes }}
+---
+apiVersion: {{ $.Values.gatewayAPI.tcpRouteApiVersion }}
+kind: TCPRoute
+metadata:
+  name: {{ printf "%s-%s" (include "stalwart.fullname" $ | trunc 47 | trimSuffix "-") $name }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" $ | nindent 4 }}
+  annotations:
+    {{- include "stalwart.annotations" (dict "specific" $route.annotations "context" $) | nindent 4 }}
+spec:
+  parentRefs:
+    {{- toYaml $route.parentRefs | nindent 4 }}
+  rules:
+    - backendRefs:
+        - name: {{ include "stalwart.fullname" $ }}
+          port: {{ (index $.Values.service.ports $name).port }}
+{{- end }}

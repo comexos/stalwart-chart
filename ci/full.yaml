@@ -1,0 +1,61 @@
+# Every optional feature on, with credentials from existing Secrets, to catch
+# template and policy regressions across the whole chart.
+dataStore:
+  backend: postgresql
+  postgresql:
+    host: postgres.database.svc.cluster.local
+    existingSecret: stalwart-postgresql
+blobStore:
+  backend: s3
+  s3:
+    bucket: mail
+    existingSecret: stalwart-s3
+provisioning:
+  existingSecret: stalwart-admin
+domain: example.org
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    - secretName: mail-tls
+      hosts: [mail.example.org]
+podAntiAffinityPreset: soft
+autoscaling:
+  enabled: true
+  maxReplicas: 3
+metrics:
+  enabled: true
+  auth:
+    username: prometheus
+    existingSecret: stalwart-metrics
+  serviceMonitor:
+    enabled: true
+email:
+  provision: true
+oidc:
+  enabled: true
+  activate: false
+  issuerUrl: https://keycloak.example.org/realms/mail
+coordinator:
+  type: nats
+  nats:
+    addresses: [nats.messaging.svc.cluster.local:4222]
+    existingSecret: stalwart-nats
+webmail:
+  enabled: true
+  jmapServerUrl: https://mail.example.org
+  sessionSecret:
+    existingSecret: bulwark-session
+  adminPassword:
+    existingSecret: bulwark-admin
+  ingress:
+    enabled: true
+    host: webmail.example.org
+  autoscaling:
+    enabled: true
+    maxReplicas: 3
+  podAntiAffinityPreset: soft
+  persistence:
+    enabled: true
+    accessMode: ReadWriteMany
+    storageClass: nfs

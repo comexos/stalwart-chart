@@ -1,0 +1,8 @@
+# Single node, local storage: the only supported shape for RocksDB.
+dataStore:
+  backend: rocksdb
+blobStore:
+  backend: existing
+persistence:
+  enabled: true
+  size: 10Gi
