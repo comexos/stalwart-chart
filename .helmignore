@@ -1,6 +1,7 @@
 .git/
 .agents/
 .codex/
+.claude/
 tests/
 __pycache__/
 .github/
@@ -13,3 +14,4 @@ rendered/
 rendered-check/
 dist/
 README.md.gotmpl
+renovate.json

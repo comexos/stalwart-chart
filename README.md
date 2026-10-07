@@ -39,6 +39,8 @@ Replace the provisioning credential with a permanent administrator's password, r
 
 Server, CLI, and Bulwark images are pinned by digest in [values.yaml](values.yaml). **Changing a tag alone does not change the image:** update the corresponding `image.digest`, or explicitly clear it to use the tag. This applies to `image`, `provisioning.image`, and `webmail.image`. A nonempty `global.imageRegistry` overrides their registries; mirrors must contain all enabled images.
 
+[Renovate](renovate.json) checks the pinned images, Bitnami Common, the CI tools and GitHub Actions weekly and opens PRs that change tag and digest together; for the main image the PR also moves `appVersion` in `Chart.yaml`. Image blocks in `values.yaml` must keep the order `registry`, `repository`, `tag`, `digest` for Renovate to match them. Install the Renovate GitHub App on the repository to enable it.
+
 Prefer existing Secrets. Plain credential values are stored in Helm release history even when rendered into Kubernetes Secrets.
 
 | Credential | Existing Secret settings |
@@ -70,6 +72,8 @@ The same Job handles optional server settings:
 | `email.provision: true` | Apply `encryptAtRest` and `encryptOnAppend` |
 | `oidc.enabled: true` | Declare an OIDC Directory; `oidc.activate` separately enables it |
 | Nonempty `coordinator.type` | Configure cluster coordination |
+
+The ServiceMonitor and its authentication Secrets always live in the Helm release namespace. Configure Prometheus's `serviceMonitorNamespaceSelector` to discover that namespace and its `serviceMonitorSelector` to match the monitor's labels; Prometheus itself can stay in a separate monitoring namespace. The former `metrics.serviceMonitor.namespace` option has been removed; remove it from existing values files before upgrading.
 
 All provisioning requires an administrator already accepted by Stalwart. The Job uses the internal management Service over HTTP. Successful Jobs are deleted; failed Jobs remain until the next attempt:
 
@@ -201,7 +205,7 @@ CI also checks workflow syntax and the values schema. Optional local hooks are d
 
 ## Release
 
-Common is vendored and included in the packaged chart. For a dependency upgrade, update `Chart.yaml`, run `helm dependency update .`, and commit `Chart.lock` and the replacement archive together. Review extracted dependency changes. `helm dependency build .` restores dependencies from the existing lock file.
+Common is vendored and included in the packaged chart. Renovate opens PRs that update it together with its archive. For a manual dependency upgrade, update `Chart.yaml`, run `helm dependency update .`, and commit `Chart.lock` and the replacement archive together. Review extracted dependency changes. `helm dependency build .` restores dependencies from the existing lock file.
 
 Push a `vX.Y.Z` tag matching `Chart.yaml` to run CI, package the chart, publish it to `oci://ghcr.io/<owner>/charts/stalwart`, and sign its digest with cosign. GitHub publishing and signing require a successful hosted run. Consumers can install a published version with their configured values:
 
@@ -298,12 +302,12 @@ The table below is generated from `values.yaml` by [helm-docs](https://github.co
 | global.defaultStorageClass | string | `""` | Default storage class when persistence.storageClass is unset. |
 | global.imagePullSecrets | list | `[]` |  |
 | global.imageRegistry | string | `""` |  |
-| image.digest | string | `"sha256:74e5a7d55303ba525d939c6bf97ed4e010df7521f52d80afc22a815b66bd53f3"` | Pinned to stalwartlabs/stalwart:v0.16.25 (multi-arch index digest). Takes precedence over tag; clear it to float on the tag instead. Refresh with: crane digest docker.io/stalwartlabs/stalwart:<tag> |
+| image.digest | string | pinned, see values.yaml | Multi-arch index digest of the tag. Takes precedence over the tag; clear it to float on the tag instead. |
 | image.pullPolicy | string | `"Always"` |  |
 | image.pullSecrets | list | `[]` |  |
 | image.registry | string | `"docker.io"` |  |
 | image.repository | string | `"stalwartlabs/stalwart"` |  |
-| image.tag | string | `"v0.16"` |  |
+| image.tag | string | pinned, see values.yaml | Image tag, kept in sync with the digest by Renovate. |
 | ingress.annotations | object | `{}` |  |
 | ingress.className | string | `""` |  |
 | ingress.enabled | bool | `false` |  |
@@ -332,7 +336,6 @@ The table below is generated from `values.yaml` by [helm-docs](https://github.co
 | metrics.serviceMonitor.honorLabels | bool | `false` |  |
 | metrics.serviceMonitor.interval | string | `"30s"` |  |
 | metrics.serviceMonitor.metricRelabelings | list | `[]` |  |
-| metrics.serviceMonitor.namespace | string | `""` | Defaults to the release namespace; override to place the ServiceMonitor in a central monitoring namespace instead. |
 | metrics.serviceMonitor.relabelings | list | `[]` |  |
 | metrics.serviceMonitor.scrapeTimeout | string | `""` |  |
 | nameOverride | string | `""` | Overrides the chart name used in resource names. |
@@ -365,12 +368,12 @@ The table below is generated from `values.yaml` by [helm-docs](https://github.co
 | provisioning.activeDeadlineSeconds | int | `600` |  |
 | provisioning.backoffLimit | int | `6` |  |
 | provisioning.existingSecret | string | `""` | Password for an administrator already recognized by Stalwart. |
-| provisioning.image.digest | string | `"sha256:9a1e07307d6f890a193322c4b737fc0868405f0f8486a19922cbf362f43884fd"` |  |
+| provisioning.image.digest | string | pinned, see values.yaml | Multi-arch index digest of the tag. Takes precedence over the tag; clear it to float on the tag instead. |
 | provisioning.image.pullPolicy | string | `"Always"` |  |
 | provisioning.image.pullSecrets | list | `[]` |  |
 | provisioning.image.registry | string | `"ghcr.io"` |  |
 | provisioning.image.repository | string | `"stalwartlabs/cli"` |  |
-| provisioning.image.tag | string | `"1.0.13"` | Pinned to 1.0.13. Refresh with:   crane digest ghcr.io/stalwartlabs/cli:<tag> |
+| provisioning.image.tag | string | pinned, see values.yaml | Image tag, kept in sync with the digest by Renovate. |
 | provisioning.password | string | `""` | Fallback only, stored in a chart-managed Secret and visible in Helm's release history. Prefer existingSecret. |
 | provisioning.passwordSecretKey | string | `"password"` |  |
 | provisioning.resources.requests.cpu | string | `"50m"` |  |
@@ -477,12 +480,12 @@ The table below is generated from `values.yaml` by [helm-docs](https://github.co
 | webmail.gatewayAPI.httpRoute.enabled | bool | `false` |  |
 | webmail.gatewayAPI.httpRoute.hostnames | list | `[]` | Defaults to a single "webmail.<domain>" hostname when empty and top-level domain is set; required explicitly otherwise. |
 | webmail.gatewayAPI.httpRoute.parentRefs | list | `[]` | Each reference names a Gateway; namespace and sectionName are optional. |
-| webmail.image.digest | string | `"sha256:31bb0f105d784a6ca953625e14b65a1d1dc3e7a96ba1a17643d472f40324227d"` | Pinned to ghcr.io/bulwarkmail/webmail:1.12.0 (tag and digest). The digest takes precedence; clear it to float on the tag. Refresh with:   crane digest ghcr.io/bulwarkmail/webmail:<tag> |
+| webmail.image.digest | string | pinned, see values.yaml | Multi-arch index digest of the tag. Takes precedence over the tag; clear it to float on the tag instead. |
 | webmail.image.pullPolicy | string | `"IfNotPresent"` |  |
 | webmail.image.pullSecrets | list | `[]` |  |
 | webmail.image.registry | string | `"ghcr.io"` |  |
 | webmail.image.repository | string | `"bulwarkmail/webmail"` |  |
-| webmail.image.tag | string | `"1.12.0"` |  |
+| webmail.image.tag | string | pinned, see values.yaml | Image tag, kept in sync with the digest by Renovate. |
 | webmail.ingress.annotations | object | `{}` |  |
 | webmail.ingress.className | string | `""` |  |
 | webmail.ingress.enabled | bool | `false` |  |

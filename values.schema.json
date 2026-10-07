@@ -763,9 +763,6 @@
             "enabled": {
               "type": "boolean"
             },
-            "namespace": {
-              "type": "string"
-            },
             "additionalLabels": {
               "type": "object",
               "additionalProperties": {

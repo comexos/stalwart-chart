@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 This chart bundles the following third-party software in charts/:
 
-  Bitnami Common (common-2.41.0.tgz)
+  Bitnami Common (charts/common-*.tgz, version in Chart.lock)
     Copyright Broadcom, Inc. All Rights Reserved.
     Licensed under the Apache License, Version 2.0.
     https://github.com/bitnami/charts/tree/main/bitnami/common

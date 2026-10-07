@@ -23,6 +23,7 @@ jobs:
       packages: write
       id-token: write   # keyless cosign signature
     env:
+      # renovate: datasource=github-releases depName=helm/helm
       HELM_VERSION: v4.3.0
       REGISTRY: ghcr.io
     steps:

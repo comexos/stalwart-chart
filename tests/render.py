@@ -39,6 +39,10 @@ def plan_lines(docs):
 
 
 class ChartChecks(unittest.TestCase):
+    def test_monitor_namespace_override_is_rejected(self):
+        error = render({'metrics': {'enabled': True, 'serviceMonitor': {'enabled': True, 'namespace': 'monitoring'}}}, succeeds=False)
+        self.assertIn('namespace', error)
+
     def test_security_and_internal_management(self):
         docs = render({'service': {'type': 'LoadBalancer'}})
         pod = workload(docs)['spec']['template']['spec']
@@ -466,6 +470,7 @@ class ChartChecks(unittest.TestCase):
         env = next(entry for entry in server['env'] if entry['name'] == 'STALWART_METRICS_PASSWORD')
         self.assertEqual(env['valueFrom']['secretKeyRef'], {'name': 'metrics-auth', 'key': 'password'})
         monitor = next(doc for doc in docs if doc['kind'] == 'ServiceMonitor')
+        self.assertEqual(monitor['metadata']['namespace'], 'mail')
         self.assertEqual(monitor['spec']['selector']['matchLabels']['app.kubernetes.io/component'], 'management')
         self.assertEqual(monitor['spec']['endpoints'][0]['port'], 'mgmt')
         self.assertEqual(monitor['spec']['endpoints'][0]['path'], '/metrics/prometheus')
@@ -702,6 +707,7 @@ class ChartChecks(unittest.TestCase):
         password = next(entry for entry in job['containers'][0]['env'] if entry['name'] == 'STALWART_PASSWORD')
         self.assertEqual(password['valueFrom']['secretKeyRef'], {'name': 'stalwart-env', 'key': 'provisioningPassword'})
         monitor = next(doc for doc in docs if doc['kind'] == 'ServiceMonitor')
+        self.assertEqual(monitor['metadata']['namespace'], 'mail')
         self.assertEqual(monitor['spec']['endpoints'][0]['basicAuth']['password'], {'name': 'stalwart-env', 'key': 'metricsPassword'})
 
         # existingSecret still takes priority over a plain value when both are set.

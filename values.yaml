@@ -22,14 +22,16 @@ existingSecret: ""
 # Container image.
 image:
   registry: docker.io
-  # -- Pinned to stalwartlabs/stalwart:v0.16.25 (multi-arch index digest).
-  # Takes precedence over tag; clear it to float on the tag instead.
-  # Refresh with: crane digest docker.io/stalwartlabs/stalwart:<tag>
-  digest: "sha256:74e5a7d55303ba525d939c6bf97ed4e010df7521f52d80afc22a815b66bd53f3"
-  pullSecrets: []
   repository: stalwartlabs/stalwart
-  tag: "v0.16"
+  # -- Image tag, kept in sync with the digest by Renovate.
+  # @default -- pinned, see values.yaml
+  tag: "v0.16.25"
+  # -- Multi-arch index digest of the tag. Takes precedence over the tag;
+  # clear it to float on the tag instead.
+  # @default -- pinned, see values.yaml
+  digest: "sha256:74e5a7d55303ba525d939c6bf97ed4e010df7521f52d80afc22a815b66bd53f3"
   pullPolicy: Always
+  pullSecrets: []
 
 # -- Number of pods in the StatefulSet.
 # Single-node deployments keep this at 1.
@@ -141,9 +143,12 @@ provisioning:
   image:
     registry: ghcr.io
     repository: stalwartlabs/cli
-    # -- Pinned to 1.0.13. Refresh with:
-    #   crane digest ghcr.io/stalwartlabs/cli:<tag>
+    # -- Image tag, kept in sync with the digest by Renovate.
+    # @default -- pinned, see values.yaml
     tag: "1.0.13"
+    # -- Multi-arch index digest of the tag. Takes precedence over the tag;
+    # clear it to float on the tag instead.
+    # @default -- pinned, see values.yaml
     digest: "sha256:9a1e07307d6f890a193322c4b737fc0868405f0f8486a19922cbf362f43884fd"
     pullPolicy: Always
     pullSecrets: []
@@ -347,9 +352,6 @@ metrics:
     password: ""
   serviceMonitor:
     enabled: false
-    # -- Defaults to the release namespace; override to place the
-    # ServiceMonitor in a central monitoring namespace instead.
-    namespace: ""
     additionalLabels: {}
     annotations: {}
     interval: 30s
@@ -457,14 +459,16 @@ webmail:
 
   image:
     registry: ghcr.io
-    # -- Pinned to ghcr.io/bulwarkmail/webmail:1.12.0 (tag and digest).
-    # The digest takes precedence; clear it to float on the tag. Refresh with:
-    #   crane digest ghcr.io/bulwarkmail/webmail:<tag>
-    digest: "sha256:31bb0f105d784a6ca953625e14b65a1d1dc3e7a96ba1a17643d472f40324227d"
-    pullSecrets: []
     repository: bulwarkmail/webmail
+    # -- Image tag, kept in sync with the digest by Renovate.
+    # @default -- pinned, see values.yaml
     tag: "1.12.0"
+    # -- Multi-arch index digest of the tag. Takes precedence over the tag;
+    # clear it to float on the tag instead.
+    # @default -- pinned, see values.yaml
+    digest: "sha256:31bb0f105d784a6ca953625e14b65a1d1dc3e7a96ba1a17643d472f40324227d"
     pullPolicy: IfNotPresent
+    pullSecrets: []
 
   # -- Multiple replicas require a pinned adminPassword and shared sessionSecret.
   # Use ReadWriteMany persistence, or disable persistence and settingsSync.
