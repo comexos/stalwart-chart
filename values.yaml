@@ -553,11 +553,11 @@ webmail:
     repository: "bulwarkmail/webmail"
     # -- Image tag, kept in sync with the digest by Renovate.
     # @default -- pinned, see values.yaml
-    tag: "1.13.0"
+    tag: "1.14.2"
     # -- Multi-arch index digest of the tag. Takes precedence over the tag;
     # clear it to float on the tag instead.
     # @default -- pinned, see values.yaml
-    digest: "sha256:cc85f569396b6eb1d3f8cf41311b7512cf6b943fa28a8844a27edaeb2daae1ed"
+    digest: "sha256:9885a046afab5054719004b885bd821d164f0d4e50a21100b96595b0400e0403"
     pullPolicy: "IfNotPresent"
     pullSecrets: []
 
