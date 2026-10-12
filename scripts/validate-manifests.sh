@@ -8,7 +8,7 @@ set -euo pipefail
 chart="$(cd "$(dirname "$0")/.." && pwd)"
 rendered="${1:-$chart/rendered}"
 
-KYVERNO=ghcr.io/kyverno/kyverno-cli@sha256:9d89ca72a3a080d79df6e2329099b90ae0cc360f65836f7c4c4561c0cde3b1ca
+KYVERNO=ghcr.io/kyverno/kyverno-cli@sha256:61eb7d3768a28d6f68ebf326ca054de9bcab206a74e0ff864c5904700e29a12c
 KUBECONFORM=ghcr.io/yannh/kubeconform@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e
 
 kyverno() {
