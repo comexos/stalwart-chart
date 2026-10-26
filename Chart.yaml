@@ -6,7 +6,7 @@ type: "application"
 version: "0.1.0"
 # Kept in step with image.tag in values.yaml.
 # renovate: image=docker.io/stalwartlabs/stalwart
-appVersion: "v0.16.26"
+appVersion: "v0.16.27"
 home: "https://stalw.art"
 icon: "https://raw.githubusercontent.com/stalwartlabs/stalwart/main/img/logo-red.svg"
 sources:
