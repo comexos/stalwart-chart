@@ -1,5 +1,11 @@
 # Upgrading
 
+## Chart 0.2.1: Stalwart 1.0.1
+
+- Metric names changed. Prometheus metrics now start with `stalwart_` and use unit and `_total` suffixes. Update your dashboards and alerts.
+- `OTEL_*` environment variables no longer work. Configure OpenTelemetry with the `serviceName`, `serviceNamespace` and `resourceAttributes` settings instead.
+- The chart's settings are unchanged.
+
 ## Stalwart 1.0
 
 This chart targets Stalwart 1.0. It does not retain compatibility with older Stalwart releases.
