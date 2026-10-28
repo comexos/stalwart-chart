@@ -21,11 +21,12 @@ blobStore:
     bucket: "stalwart-mail"
     region: "EuCentral1"
     existingSecret: "stalwart-s3"
-    accessKeySecretKey: "accessKey"
+    accessKeyIdSecretKey: "accessKeyId"
     secretKeySecretKey: "secretKey"
-    # For MinIO/other S3-compatible services, set both:
-    # endpoint: https://minio.storage.svc.cluster.local:9000
-    # customRegion: us-east-1
+    # For MinIO/other S3-compatible services:
+    # custom:
+    #   url: https://minio.storage.svc.cluster.local:9000
+    #   region: us-east-1
 
 provisioning:
   username: "admin"

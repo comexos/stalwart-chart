@@ -39,10 +39,14 @@ oidc:
   enabled: true
   activate: false
   issuerUrl: "https://keycloak.example.org/realms/mail"
+inMemoryStore:
+  type: "redis"
+  redis:
+    url: "redis://valkey.cache.svc.cluster.local:6379"
 coordinator:
   type: "nats"
   nats:
-    addresses: ["nats.messaging.svc.cluster.local:4222"]
+    hosts: ["nats.messaging.svc.cluster.local:4222"]
     existingSecret: "stalwart-nats"
 webmail:
   enabled: true
@@ -62,4 +66,20 @@ webmail:
     enabled: true
     accessMode: "ReadWriteMany"
     storageClass: "nfs"
+systemAccounts:
+  smtpCheck:
+    enabled: true
+    host: "stalwart-smtp-internal"
+    port: 2525
+  accounts:
+    - id: "mailer"
+      name: "mailer"
+      domain: "example.org"
+      aliases: ["no-reply"]
+      appPassword:
+        allowedIps: ["10.0.0.0/8"]
+        permissions: ["authenticate", "emailSend"]
+      secret:
+        name: "mailer-smtp"
+        keys: ["password"]
 ...

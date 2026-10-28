@@ -12,25 +12,25 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/comexos/stalwart-chart/releases"><img alt="Chart version" src="https://img.shields.io/github/v/tag/comexos/stalwart-chart?sort=semver&label=chart&style=flat-square&logo=helm&logoColor=white"></a>
-  <a href="https://github.com/stalwartlabs/stalwart/releases"><img alt="Stalwart version" src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcomexos%2Fstalwart-chart%2Fmain%2FChart.yaml&query=%24.appVersion&label=stalwart&color=db2d54&style=flat-square"></a>
-  <a href="https://github.com/bulwarkmail/webmail/releases"><img alt="Bulwark version" src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcomexos%2Fstalwart-chart%2Fmain%2Fvalues.yaml&query=%24.webmail.image.tag&label=bulwark&color=4f46e5&style=flat-square"></a>
-  <a href="https://github.com/comexos/stalwart-chart/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/comexos/stalwart-chart/ci.yml?branch=main&label=ci&style=flat-square&logo=githubactions&logoColor=white"></a>
-  <a href="https://github.com/comexos/stalwart-chart/actions/workflows/release.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/comexos/stalwart-chart/release.yml?label=release&style=flat-square&logo=githubactions&logoColor=white"></a>
+  <a href="https://github.com/s7n-systems/stalwart-chart/releases"><img alt="Chart version" src="https://img.shields.io/github/v/tag/s7n-systems/stalwart-chart?sort=semver&label=chart&style=flat-square&logo=helm&logoColor=white"></a>
+  <a href="https://github.com/stalwartlabs/stalwart/releases"><img alt="Stalwart version" src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fs7n-systems%2Fstalwart-chart%2Fmain%2FChart.yaml&query=%24.appVersion&label=stalwart&color=db2d54&style=flat-square"></a>
+  <a href="https://github.com/bulwarkmail/webmail/releases"><img alt="Bulwark version" src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fs7n-systems%2Fstalwart-chart%2Fmain%2Fvalues.yaml&query=%24.webmail.image.tag&label=bulwark&color=4f46e5&style=flat-square"></a>
+  <a href="https://github.com/s7n-systems/stalwart-chart/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/s7n-systems/stalwart-chart/ci.yml?branch=main&label=ci&style=flat-square&logo=githubactions&logoColor=white"></a>
+  <a href="https://github.com/s7n-systems/stalwart-chart/actions/workflows/release.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/s7n-systems/stalwart-chart/release.yml?label=release&style=flat-square&logo=githubactions&logoColor=white"></a>
 </p>
 
 <p align="center">
-  <a href="#install"><img alt="OCI registry" src="https://img.shields.io/badge/oci-ghcr.io%2Fcomexos%2Fcharts-0f1689?style=flat-square&logo=helm&logoColor=white"></a>
+  <a href="#install"><img alt="OCI registry" src="https://img.shields.io/badge/oci-ghcr.io%2Fs7n-systems%2Fcharts-0f1689?style=flat-square&logo=helm&logoColor=white"></a>
   <a href="#verify-the-signature"><img alt="Signed with cosign" src="https://img.shields.io/badge/signed-cosign-2e7d32?style=flat-square&logo=sigstore&logoColor=white"></a>
-  <a href="#images-and-updates"><img alt="Images pinned by digest" src="https://img.shields.io/badge/images-digest%20pinned-2e7d32?style=flat-square&logo=docker&logoColor=white"></a>
+  <a href="#images"><img alt="Images pinned by digest" src="https://img.shields.io/badge/images-digest%20pinned-2e7d32?style=flat-square&logo=docker&logoColor=white"></a>
   <a href="renovate.json"><img alt="Renovate" src="https://img.shields.io/badge/renovate-enabled-1a1f6c?style=flat-square&logo=renovatebot&logoColor=white"></a>
   <a href="https://kubernetes.io"><img alt="Kubernetes" src="https://img.shields.io/badge/kubernetes-1.27%2B-326ce5?style=flat-square&logo=kubernetes&logoColor=white"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/comexos/stalwart-chart?style=flat-square"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/s7n-systems/stalwart-chart?style=flat-square"></a>
 </p>
 
 ---
 
-The chart deploys Stalwart 0.16 as a StatefulSet and configures it the way Stalwart 0.16 expects: a small startup file selects the database, and most server settings live in that database. The chart applies the settings it manages with a `stalwart-cli` Job after each install and upgrade, so those settings can be managed without hand edits in the web UI. Some changes need a settings reload or restart, as described below.
+The chart deploys Stalwart 1.0 as a StatefulSet and configures it the way Stalwart 1.0 expects: a small startup file selects the database, and most server settings live in that database. The chart applies the settings it manages with a `stalwart-cli` Job after each install and upgrade, so those settings can be managed without hand edits in the web UI, and restarts Stalwart when they changed, since Stalwart reads them at start-up.
 
 > [!NOTE]
 > CI checks rendering, values validation, Kubernetes schemas for available resource types, policies and generated documentation. It does not start the containers. Mail delivery, OAuth login and multi-replica operation still need testing against your own infrastructure; see [Before production](#before-production).
@@ -42,9 +42,9 @@ The chart deploys Stalwart 0.16 as a StatefulSet and configures it the way Stalw
 - [Install](#install)
 - [First-time setup](#first-time-setup)
 - [Configuration](#configuration)
-  - [Images and updates](#images-and-updates) · [Credentials](#credentials) · [Storage](#storage) · [Server settings](#server-settings)
+  - [Images](#images) · [Credentials](#credentials) · [Storage](#storage) · [Server settings](#server-settings)
   - [Networking](#networking) · [TLS certificates](#tls-certificates) · [Monitoring](#monitoring) · [Authentication](#authentication)
-  - [Webmail](#webmail) · [Scaling and high availability](#scaling-and-high-availability) · [Security](#security)
+  - [System accounts](#system-accounts) · [Webmail](#webmail) · [Scaling](#scaling) · [Security](#security)
 - [Operations](#operations)
 - [Development](#development)
 - [Values](#values)
@@ -55,10 +55,11 @@ The chart deploys Stalwart 0.16 as a StatefulSet and configures it the way Stalw
 | | |
 | --- | --- |
 | **Storage** | External PostgreSQL (default) or local RocksDB as the database; S3 or any S3-compatible service for mail blobs |
-| **Declarative settings** | Blob store, server hostname, Prometheus exporter, logging, OIDC directory, cluster coordinator and encryption at rest applied by a CLI Job; anything else through `provisioning.extraPlan` |
+| **Declarative settings** | Blob store, server hostname and default domain, Prometheus exporter, logging, OIDC directory, in-memory store, cluster coordinator and encryption at rest applied by a CLI Job; anything else through `provisioning.extraPlan` |
+| **System accounts** | Send-only accounts for other applications, with app passwords published to Secrets |
 | **Exposure** | Mail Service for SMTP, IMAP, POP3 and ManageSieve (LoadBalancer or NodePort); Ingress or Gateway API HTTPRoute for the web UI, JMAP and DAV; Gateway API TCPRoutes for mail ports; dual-stack |
 | **Scaling** | HorizontalPodAutoscaler with a conservative scale-down, PodDisruptionBudget, anti-affinity presets, topology spread, NATS/Redis/Kafka/Zenoh coordination |
-| **Security** | Non-root, read-only root filesystem, all capabilities dropped except `NET_BIND_SERVICE`, no ServiceAccount token, images pinned by digest, optional Kyverno policies |
+| **Security** | Non-root, read-only root filesystem, all capabilities dropped except `NET_BIND_SERVICE`, no ServiceAccount token in the Stalwart and webmail pods, images pinned by digest, optional Kyverno policies |
 | **Observability** | Prometheus exporter with optional Basic authentication and ServiceMonitor; logs to stdout |
 | **Certificates** | Mounted certificates (for example from cert-manager) reloaded on a schedule without restarting pods |
 | **Webmail** | Bulwark JMAP webmail with OAuth/OIDC login, its own autoscaling, PDB and persistence |
@@ -69,7 +70,8 @@ The chart deploys Stalwart 0.16 as a StatefulSet and configures it the way Stalw
 - Kubernetes 1.27 or later, and Helm 3.8 or later (Helm 4 is used in CI).
 - PostgreSQL for the default database, reachable from the cluster. RocksDB needs a persistent volume and limits you to one replica.
 - An S3 bucket, unless you set `blobStore.backend: existing` and configure blob storage yourself.
-- For more than one Stalwart replica, a shared external database and cluster coordinator (NATS, Redis, Kafka or Zenoh) are required.
+- For more than one Stalwart replica, a shared external database, a shared Redis-compatible in-memory store (Redis or Valkey) and a cluster coordinator (NATS, Redis, Kafka or Zenoh) are required.
+- Stalwart 1.0 cannot run on a 0.16 database: chart versions before 0.2.0 deployed Stalwart 0.16, and their data must be migrated with Stalwart's [migration tool](https://stalw.art/docs/migration/upgrade-0-16/) or the installation started fresh.
 - Optional: Prometheus Operator CRDs for the ServiceMonitor; Gateway API CRDs for routes; cert-manager for certificates.
 
 ## Install
@@ -79,34 +81,34 @@ Create the namespace and the Secrets the chart refers to. The names below match 
 | Secret | Keys |
 | --- | --- |
 | `stalwart-postgresql` | `password`: database password |
-| `stalwart-s3` | `accessKey`, `secretKey`: bucket credentials |
+| `stalwart-s3` | `accessKeyId`, `secretKey`: bucket credentials |
 | `stalwart-admin` | `password`: administrator password for the provisioning Job; `STALWART_RECOVERY_ADMIN`: `admin:<same password>` for the first start |
 
 ```sh
 kubectl create namespace stalwart
 kubectl --namespace stalwart create secret generic stalwart-postgresql --from-literal=password='<db-password>'
 kubectl --namespace stalwart create secret generic stalwart-s3 \
-  --from-literal=accessKey='<access-key>' --from-literal=secretKey='<secret-key>'
+  --from-literal=accessKeyId='<access-key-id>' --from-literal=secretKey='<secret-key>'
 kubectl --namespace stalwart create secret generic stalwart-admin \
   --from-literal=password='<admin-password>' --from-literal=STALWART_RECOVERY_ADMIN='admin:<admin-password>'
 ```
 
-Copy the example to `my-values.yaml`, set the database host, bucket and `hostname`, and install from the OCI registry:
+Copy the example to `my-values.yaml`, set the database host, bucket, `hostname` and `domain`, and install from the OCI registry:
 
 ```sh
-helm upgrade --install stalwart oci://ghcr.io/comexos/charts/stalwart \
-  --version 0.1.0 --namespace stalwart -f my-values.yaml --timeout 15m
+helm upgrade --install stalwart oci://ghcr.io/s7n-systems/charts/stalwart \
+  --version 0.2.0 --namespace stalwart -f my-values.yaml --timeout 15m
 ```
 
 The chart validates required storage settings and credential references before rendering. It cannot check whether referenced Secrets exist or whether external services are reachable; these failures can still leave an incomplete installation. To install from a checkout instead, use `.` as the chart: Bitnami Common is vendored in `charts/`, so no dependency download is needed.
 
 ### Verify the signature
 
-Release builds are signed keylessly with cosign from this repository's release workflow:
+Release builds are signed keylessly with cosign 3 from this repository's release workflow. Cosign 3 stores the signature as an OCI referrer in the new bundle format; verify with cosign 3 or newer (cosign 2 reports "no signatures found"):
 
 ```sh
-cosign verify ghcr.io/comexos/charts/stalwart:0.1.0 \
-  --certificate-identity-regexp '^https://github\.com/comexos/stalwart-chart/\.github/workflows/release\.yml@' \
+cosign verify ghcr.io/s7n-systems/charts/stalwart:0.2.0 \
+  --certificate-identity-regexp '^https://github\.com/s7n-systems/stalwart-chart/\.github/workflows/release\.yml@' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
@@ -115,7 +117,7 @@ cosign verify ghcr.io/comexos/charts/stalwart:0.1.0 \
 For an interactive first-time setup, use recovery mode, which suspends mail services and opens only the management listener. You can instead provision domains and other settings through `provisioning.extraPlan` during a normal installation.
 
 ```sh
-helm upgrade --install stalwart oci://ghcr.io/comexos/charts/stalwart --version 0.1.0 \
+helm upgrade --install stalwart oci://ghcr.io/s7n-systems/charts/stalwart --version 0.2.0 \
   --namespace stalwart -f my-values.yaml --set recoveryMode.enabled=true --timeout 15m
 kubectl --namespace stalwart port-forward svc/stalwart-management 8080:8080
 ```
@@ -124,13 +126,11 @@ Open <http://localhost:8080/admin>, sign in with the recovery administrator, and
 
 Afterwards, point the provisioning credential at a permanent administrator. If `recoveryAdmin.enabled` is set, disable it before removing its referenced Secret key. Remove `STALWART_RECOVERY_ADMIN` from any Secret loaded through `existingSecret`, then restart the pods. The provisioning Job needs a valid administrator on every upgrade.
 
-The console log setting takes effect at start-up only: restart the pods once after the first installation to see Stalwart's logs in `kubectl logs`.
-
 ## Configuration
 
 Every option is listed under [Values](#values). This section explains how the parts fit together.
 
-### Images and updates
+### Images
 
 The Stalwart, CLI and Bulwark images are pinned by digest. **Changing a tag alone does not change the image:** set the matching `digest` too, or clear it to follow the tag. This applies to `image`, `provisioning.image` and `webmail.image`. With digests, `pullPolicy: IfNotPresent` is always correct. `global.imageRegistry` replaces all three registries for a mirror.
 
@@ -144,7 +144,7 @@ Prefer existing Secrets: plain values are stored in Helm's release history, even
 | --- | --- |
 | Recovery administrator | `recoveryAdmin.existingSecret`, `.secretKey` (value `username:password`) |
 | PostgreSQL | `dataStore.postgresql.existingSecret`, `.passwordSecretKey` |
-| S3 | `blobStore.s3.existingSecret`, `.accessKeySecretKey`, `.secretKeySecretKey` |
+| S3 | `blobStore.s3.existingSecret`, `.accessKeyIdSecretKey`, `.secretKeySecretKey` |
 | Provisioning administrator | `provisioning.existingSecret`, `.passwordSecretKey` (password only; `provisioning.username` is separate) |
 | Metrics | `metrics.auth.existingSecret`, `.passwordSecretKey` |
 | NATS | `coordinator.nats.existingSecret`, `.passwordSecretKey` |
@@ -157,7 +157,7 @@ The top-level `existingSecret` is loaded into the server's environment with `env
 
 `dataStore.backend` selects `postgresql` (default) or `rocksdb`. A non-empty `config` object replaces this with a raw startup configuration for other backends. RocksDB and SQLite data stores need persistent storage and cannot run with more than one replica. The chart defaults to `persistence.enabled: false`; enable it for a local database. Custom local paths must match the mounted data volume (`/var/lib/stalwart`) or use additional volumes.
 
-`blobStore.backend: s3` stores messages in a bucket. Use Stalwart's region names such as `EuCentral1`; for MinIO, SeaweedFS or another S3-compatible service set `endpoint` and `customRegion`. Only static access keys are supported. `blobStore.backend: existing` leaves blob storage as configured elsewhere.
+`blobStore.backend: s3` stores messages in a bucket. Use Stalwart's region names such as `EuCentral1`; for MinIO, SeaweedFS or another S3-compatible service set `custom.url` and `custom.region`. Only static access keys are supported. `blobStore.backend: existing` leaves blob storage as configured elsewhere.
 
 Changing the blob store does not migrate existing mail.
 
@@ -168,28 +168,33 @@ The chart applies these settings with a `stalwart-cli apply` Job after every ins
 | Values | Effect |
 | --- | --- |
 | `blobStore.backend: s3` | Configures the S3 blob store |
-| `hostname` | Sets the server hostname and reloads the settings on running pods |
+| `hostname` | Sets the server hostname and default domain (`mailDomain`, default `domain`) |
 | `logging.console.enabled` (default) | Logs to stdout and disables the default log file |
 | `metrics.enabled`, `metrics.provision` | Enables the Prometheus exporter |
 | `email.provision` | Applies `encryptAtRest` and `encryptOnAppend` |
 | `oidc.enabled` | Declares an OIDC directory; `oidc.activate` switches authentication to it |
+| `systemAccounts.accounts` | Creates system accounts; the reconcile Job writes their app passwords, see [System accounts](#system-accounts) |
+| `inMemoryStore.type` | Configures the shared in-memory store |
 | `coordinator.type` | Configures cluster coordination |
 | `provisioning.extraPlan` | Applies further operations after the chart's own |
 
-Set `hostname` on every installation, usually to the public mail host. A new server has none, so JMAP session URLs would point at the pod name.
+Set `hostname` on every installation, usually to the public mail host. A new server has none, so JMAP session URLs would point at the pod name. Stalwart requires a default domain with it: the Job creates `mailDomain` (default: `domain`) if it is missing, matched by name, and makes it the default.
 
-`provisioning.extraPlan` takes any `stalwart-cli apply` operation, one object per entry; it runs after the chart's own entries, so it can refer to them and override them. For example, a domain that also becomes the server's default:
+`provisioning.extraPlan` takes any `stalwart-cli apply` operation, one object per entry; it runs after the chart's own entries, so it can refer to them and override them. For example, an additional domain:
 
 ```yaml
 hostname: mail.example.org
+domain: example.org
 provisioning:
   extraPlan:
-    - {"@type": upsert, object: Domain, matchOn: [name], value: {main: {name: example.org}}}
-    - {"@type": update, object: SystemSettings, value: {defaultDomainId: "#main"}}
-    - {"@type": create, object: Action, value: {reload: {"@type": ReloadSettings}}}
+    - {"@type": upsert, object: Domain, matchOn: [name], value: {second: {name: example.net}}}
 ```
 
-Stalwart reads server settings at start-up; a `ReloadSettings` action applies them to running pods. A reload validates the whole configuration first, including the OIDC issuer's discovery document, so it fails while the identity provider is unreachable.
+Stalwart 1.0 renamed and restructured many settings; plans written for 0.16 fail with errors such as `invalidPatch`. See Stalwart's [schema changes](https://github.com/stalwartlabs/stalwart-migrate/blob/main/SCHEMA_CHANGES.md).
+
+After provisioning, the reconciliation Job restarts Stalwart when server settings change and waits for readiness. Interrupted runs resume the pending rollout. A database reset triggers another restart. This requires `updateStrategy: RollingUpdate` without a partition.
+
+The Job uses a restart instead of `ReloadSettings`, so installation does not require a reachable OIDC provider. See [reconciliation](docs/reconciliation.md) for restart markers and Secret ownership.
 
 The Job needs an administrator Stalwart already accepts. It talks to the internal management Service over HTTP; successful Jobs are deleted, failed ones stay for inspection:
 
@@ -222,7 +227,6 @@ provisioning:
   extraPlan:
     - {"@type": upsert, object: NetworkListener, matchOn: [name],
        value: {submission: {name: submission, protocol: smtp, bind: {"[::]:587": true}}}}
-    - {"@type": create, object: Action, value: {reload: {"@type": ReloadSettings}}}
 ```
 
 `values.yaml` has commented entries for 995 (POP3S), 4190 (ManageSieve), 587 (submission), 143 (IMAP), 110 (POP3) and 80 (HTTP).
@@ -245,13 +249,12 @@ ingress:
       hosts: [mail.example.org]
 ```
 
-With top-level `domain` set, an empty `ingress.hosts` defaults to `mail.<domain>`. Behind a proxy, Stalwart sees the proxy's address; let it trust `X-Forwarded-For` when only the Ingress and the cluster reach the HTTP listener:
+With top-level `domain` set, an empty `ingress.hosts` defaults to `mail.<domain>`. Behind a proxy, Stalwart sees the proxy's address; let it take the client address from `X-Forwarded-For` when only the Ingress and the cluster reach the HTTP listener (`forwardedHops`: the number of trusted proxies in front of Stalwart):
 
 ```yaml
 provisioning:
   extraPlan:
-    - {"@type": update, object: Http, value: {useXForwarded: true}}
-    - {"@type": create, object: Action, value: {reload: {"@type": ReloadSettings}}}
+    - {"@type": update, object: Http, value: {clientIpSource: xForwardedFor, forwardedHops: 1}}
 ```
 
 `ingress.backend: mail` forwards to the mail Service's `https` port instead, Stalwart's TLS listener; your controller then needs its HTTPS-upstream setting.
@@ -299,8 +302,6 @@ provisioning:
           certificate: {"@type": File, filePath: /etc/stalwart/tls/tls.crt}
           privateKey: {"@type": File, filePath: /etc/stalwart/tls/tls.key}
     - {"@type": update, object: SystemSettings, value: {defaultCertificateId: "#main-tls"}}
-    - {"@type": create, object: Action, value: {reload: {"@type": ReloadSettings}}}
-    - {"@type": create, object: Action, value: {reload-tls: {"@type": ReloadTlsCertificates}}}
 
 certificateReload:
   enabled: true
@@ -316,9 +317,60 @@ Stalwart reads certificate files only at start-up or on `ReloadTlsCertificates`.
 
 ### Authentication
 
-`oidc.enabled` declares an OpenID Connect directory: Stalwart validates bearer tokens from your identity provider (for example Keycloak) and needs no client secret. `oidc.activate: true` makes it the server-wide directory for every protocol, not just the web UI. [OIDC accounts](https://www.stalw.art/docs/auth/backend/oidc/) can be created on first login, matched by `claimUsername`. Pre-create them if they must receive mail before the first login; the chart does not provision user accounts automatically. Test administrator and mail-client logins before activating it in production; the recovery administrator keeps working.
+`oidc.enabled` provisions an OIDC directory. Set `oidc.issuerUrl` to the provider's issuer URL and use `oidc.claimUsername` to match accounts. `oidc.activate: true` makes this the server-wide directory for every protocol.
+
+Stalwart validates bearer tokens without a client secret. The token audience must match a Stalwart resource identifier or `oidc.acceptedAudiences`.
+
+`oidc.unscopedTokens` controls tokens without Stalwart scopes (`mail`, `contacts`, `calendars`, `files`):
+
+| Value | Access |
+| --- | --- |
+| `reject` | Reject the token (default) |
+| `interoperable` | Allow those four scopes, without management access |
+| `full` | Full access |
+
+External-directory accounts use app passwords for IMAP and SMTP; administrators cannot set their passwords. Accounts can be created on first OIDC login. Pre-create accounts that must receive mail before then. The chart does not provision ordinary users. Test administrator and mail-client logins before activation; the recovery administrator remains available.
 
 `email.provision: true` applies the server-wide encryption-at-rest settings. Encryption also needs each account's OpenPGP key or S/MIME certificate, and does not encrypt the S3 bucket.
+
+### System accounts
+
+Other applications that send mail, such as notifications or password resets, need an account with a password. Once authentication runs through an external directory (`oidc.activate`), Stalwart refuses passwords an administrator sets; it only accepts app passwords it generates itself and shows once. `systemAccounts.accounts` covers this: the provisioning Job creates each account, and the reconcile Job creates an app password for it and writes it into a Secret that the applications read.
+
+```yaml
+systemAccounts:
+  smtpCheck: {enabled: true, host: stalwart-headless, port: 2525}   # a listener that allows AUTH without TLS
+  accounts:
+    - id: mailer
+      name: mailer                         # mailer@<mailDomain or domain>
+      aliases: [no-reply]
+      permissions: [authenticate, emailSend]   # default when omitted: send mail, nothing else; [] grants none
+      appPassword:
+        allowedIps: [10.0.0.0/8]           # the cluster network
+      secret:
+        name: mailer-smtp
+        keys: [password]                   # keys that hold the password
+```
+
+The reconcile Job runs after the provisioning Job on every install and upgrade. For each account it records the app password's reference in an annotation on the Secret (`stalwart.s7n.systems/credential`):
+
+- **Recorded credential exists in Stalwart:** nothing to do, apart from the SMTP check when `smtpCheck` is enabled, filling keys added to `keys`, and applying changed `appPassword` restrictions (`allowedIps`, `permissions`) to it in place; the password stays the same.
+- **No credential recorded, gone from Stalwart, or no password in the Secret** (first installation, database reset, revocation, deleted Secret data): it creates an app password, checks it with SMTP AUTH, and writes it into the Secret. A failed check revokes it again and fails the run.
+
+`smtpCheck` logs in like an application does. Stalwart offers AUTH without TLS only where you allow it (`MtaStageAuth`), so either point it at such an internal listener or set `startTls`.
+
+A new app password is never created because a login failed: network errors, timeouts and failed checks fail the run, which the Job retries. App passwords marked for an account but not recorded, left by a run that died after creating one, are revoked. A lock annotation on the Secret serializes runs of different Jobs.
+
+Applications read the password when they start. Deploy them after Stalwart, so they start with it; Stalwart needs neither the identity provider nor the applications for this, see [Server settings](#server-settings). After a new app password, for example after a database reset, restart the applications that use it; applications that store the password in their own configuration need that configuration applied again.
+
+Secret lifecycle:
+
+- `secret.create: true`: Helm creates an empty Secret and deletes it on uninstall. The Job writes the password.
+- `secret.create: false`: pre-create the Secret. The Job updates its password keys and annotations, preserving other keys. The chart leaves it on uninstall.
+- Keep one writer for the password keys and Job annotations. An external controller must not overwrite them.
+- Changing `create` from true to false can delete a Helm-owned Secret. Follow an explicit ownership handover; see [reconciliation](docs/reconciliation.md).
+
+`allowedIps` must include the Job's pod network when `smtpCheck` is enabled. Helm upgrades and `kubectl apply` are tested locally; Argo CD syncs are not.
 
 ### Webmail
 
@@ -351,7 +403,6 @@ provisioning:
           Access-Control-Allow-Headers: Authorization, Content-Type, Accept, X-Requested-With
           Access-Control-Allow-Methods: POST, GET, PATCH, PUT, DELETE, HEAD, OPTIONS
           Vary: Origin
-    - {"@type": create, object: Action, value: {reload: {"@type": ReloadSettings}}}
 ```
 
 Without `jmapServerUrl`, Bulwark uses the internal management Service, which only works from inside the cluster. Serve Bulwark on its own host: its base path is fixed when the image is built.
@@ -360,9 +411,9 @@ Without `jmapServerUrl`, Bulwark uses the internal management Service, which onl
 
 For more than one webmail replica, set both `adminPassword` and `sessionSecret`, and either use `ReadWriteMany` persistence or disable persistence and settings sync. With a `ReadWriteOnce` volume the Deployment uses the `Recreate` strategy, to avoid attachment conflicts if the replacement pod is scheduled on another node. An explicit `webmail.strategy` overrides this default.
 
-### Scaling and high availability
+### Scaling
 
-More than one Stalwart replica needs shared external data and blob stores (PostgreSQL and S3 with the chart's defaults) and a coordinator, which carries mailbox changes, IMAP IDLE/push and blocked-IP events between pods. The chart deploys none of these. With `replicaCount` or `autoscaling.maxReplicas` above 1, it rejects local databases and requires `coordinator.type`, or `coordinator.externallyManaged: true` when the coordinator is configured outside Helm:
+More than one Stalwart replica needs shared external data and blob stores (PostgreSQL and S3 with the chart's defaults) and a coordinator, which carries mailbox changes, IMAP IDLE/push and blocked-IP events between pods. The chart deploys none of these. With `replicaCount` or `autoscaling.maxReplicas` above 1, it rejects local databases and requires `coordinator.type`, or `coordinator.externallyManaged: true` when the coordinator is configured outside Helm. Stalwart refuses a coordinator while the in-memory store is its local, single-node one, so a chart-managed coordinator also requires `inMemoryStore.type: redis`:
 
 ```yaml
 replicaCount: 3
@@ -370,8 +421,12 @@ podAntiAffinityPreset: soft
 coordinator:
   type: nats
   nats:
-    addresses: [nats.messaging.svc.cluster.local:4222]
+    hosts: [nats.messaging.svc.cluster.local:4222]
     existingSecret: stalwart-nats   # key: password
+inMemoryStore:
+  type: redis
+  redis:
+    url: redis://valkey.cache.svc.cluster.local:6379
 ```
 
 NATS is recommended for most clusters (plain pub/sub, no JetStream); `redis`, `kafka` and `zenoh` are also supported.
@@ -388,13 +443,17 @@ NATS is recommended for most clusters (plain pub/sub, no JetStream); `redis`, `k
 
 ### Security
 
-Stalwart runs as UID/GID 2000 with a read-only root filesystem, the `RuntimeDefault` seccomp profile and every capability dropped except `NET_BIND_SERVICE`. Pods mount no ServiceAccount token, and the chart grants no RBAC permissions. Extra writable paths need `extraVolumes`.
+Stalwart runs as UID/GID 2000 with a read-only root filesystem, `RuntimeDefault` seccomp, and all capabilities dropped except `NET_BIND_SERVICE`. Use `extraVolumes` for additional writable paths.
 
-The management Service is `ClusterIP`, but any pod in the cluster can reach it. Restrict it with a NetworkPolicy that allows the required clients: your Ingress controller or Gateway, Prometheus, Bulwark, the provisioning Job, the certificate-reload Job and any external provisioning connector. The chart does not create NetworkPolicies.
+Stalwart and webmail pods have no Kubernetes permissions and mount no ServiceAccount token. The reconciliation Job uses a short-lived projected token. Its Roles allow `get`/`patch` on this release's StatefulSet and `get`/`update` on the named system-account Secrets. Each Secret namespace gets its own Role. StatefulSet patch permission permits changes to the whole specification, not just the restart annotation.
+
+The management Service is `ClusterIP`, but any pod in the cluster can reach it. Restrict it with a NetworkPolicy that allows the required clients: your Ingress controller or Gateway, Prometheus, Bulwark, the provisioning and reconcile Jobs, the certificate-reload Job and any external provisioning connector. The chart does not create NetworkPolicies.
 
 [policies/kyverno/](policies/kyverno/) contains optional Kyverno `ValidatingPolicy` resources for pod hardening, digest-pinned images and resource requests. The chart does not install them. They deny by default and apply cluster-wide, so scope them before using them on a shared cluster.
 
 ## Operations
+
+See [Upgrading](docs/upgrading.md) before changing application versions.
 
 - **Hooks:** the provisioning Job is a Helm `post-install`/`post-upgrade` hook and an Argo CD `PostSync` hook. GitOps tools must run hooks; a plain `helm template | kubectl apply` creates it as an ordinary Job, without hook ordering, cleanup or automatic recreation on subsequent applies.
 - **Secrets:** pods read environment variables at start-up. Restart them after changing an existing Secret.
@@ -414,17 +473,20 @@ pip install --require-hashes -r ci/requirements.txt
 scripts/render-matrix.sh            # helm lint and render ci/*.yaml and the example
 scripts/validate-manifests.sh       # kubeconform and the Kyverno policies
 python3 tests/render.py             # template unit tests
+python3 tests/test_reconcile.py     # reconciliation unit tests (no services required)
+tests/e2e/run.sh                    # reconcile Job against Stalwart and a k3s API server (Docker)
+tests/e2e/kind.sh                   # the chart in a kind cluster: hooks, restart, RBAC, a consumer that logs in
 yamllint -c .yamllint.yaml .
 scripts/generate-docs.sh --check    # README is current
 ```
 
-Once installed, `.pre-commit-config.yaml` runs Helm lint, YAML lint, documentation generation and render tests when relevant files change. The render matrix and manifest-policy checks must be run separately. Non-template YAML files start with `---`, end with `...` and quote every string, as enforced by yamllint.
+Once installed, `.pre-commit-config.yaml` runs Helm lint, YAML lint, documentation generation, render tests and reconciliation unit tests when relevant files change. The render matrix and manifest-policy checks must be run separately. Non-template YAML files start with `---`, end with `...` and quote every string, as enforced by yamllint.
 
 This README is generated from `README.md.gotmpl` and the `# --` comments in `values.yaml` by [helm-docs](https://github.com/norwoodj/helm-docs): edit those and run `scripts/generate-docs.sh`. The badges read their versions from GitHub when viewed. Version and default-value changes still require regeneration of the install commands and values table.
 
 ### Release
 
-Bitnami Common is vendored in `charts/` and updated by Renovate together with `Chart.lock`; for a manual update run `helm dependency update .` and commit both. Push a `vX.Y.Z` tag matching `version` in `Chart.yaml`: the release workflow runs CI, publishes the chart to `oci://ghcr.io/comexos/charts/stalwart` and signs it with cosign.
+Bitnami Common is vendored in `charts/` and updated by Renovate together with `Chart.lock`; for a manual update run `helm dependency update .` and commit both. Push a `vX.Y.Z` tag matching `version` in `Chart.yaml`: the release workflow runs CI, publishes the chart to `oci://ghcr.io/s7n-systems/charts/stalwart`, signs it with cosign and creates a GitHub release with the packaged chart and generated notes.
 
 ## Values
 
@@ -444,15 +506,15 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 | autoscaling.targetCPUUtilizationPercentage | int | `80` |  |
 | autoscaling.targetMemoryUtilizationPercentage | string | `""` |  |
 | blobStore.backend | string | `"s3"` |  |
-| blobStore.s3.accessKey | string | `""` | Fallback only, stored in a chart-managed Secret and visible in Helm's release history. Prefer existingSecret. Both are required together when existingSecret is not set. |
-| blobStore.s3.accessKeySecretKey | string | `"accessKey"` |  |
+| blobStore.s3.accessKeyId | string | `""` | Fallback only, stored in a chart-managed Secret and visible in Helm's release history. Prefer existingSecret. Both are required together when existingSecret is not set. |
+| blobStore.s3.accessKeyIdSecretKey | string | `"accessKeyId"` |  |
 | blobStore.s3.allowInvalidCerts | bool | `false` |  |
 | blobStore.s3.bucket | string | `""` |  |
-| blobStore.s3.customRegion | string | `"us-east-1"` |  |
-| blobStore.s3.endpoint | string | `""` |  |
+| blobStore.s3.custom.region | string | `"us-east-1"` |  |
+| blobStore.s3.custom.url | string | `""` |  |
 | blobStore.s3.existingSecret | string | `""` |  |
 | blobStore.s3.keyPrefix | string | `""` |  |
-| blobStore.s3.region | string | `"EuCentral1"` | Stalwart region variant, e.g. EuCentral1. An endpoint selects Custom instead. |
+| blobStore.s3.region | string | `"EuCentral1"` | Stalwart region variant, e.g. EuCentral1. Ignored when custom.url is set. |
 | blobStore.s3.secretKey | string | `""` |  |
 | blobStore.s3.secretKeySecretKey | string | `"secretKey"` |  |
 | blobStore.s3.verifyAfterWrite | bool | `true` |  |
@@ -472,11 +534,11 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 | containerSecurityContext.readOnlyRootFilesystem | bool | `true` |  |
 | containerSecurityContext.runAsNonRoot | bool | `true` |  |
 | coordinator.externallyManaged | bool | `false` | Confirms that, with type empty, the Coordinator is configured outside Helm (e.g. in the WebUI). With more than one replica the chart requires either a type or this flag, since uncoordinated replicas miss each other's mailbox changes, IMAP IDLE/push and blocked-IP events. |
-| coordinator.kafka.brokers | list | `[]` |  |
 | coordinator.kafka.groupId | string | `"stalwart"` |  |
-| coordinator.nats.addresses | list | `[]` |  |
+| coordinator.kafka.hosts | list | `[]` |  |
 | coordinator.nats.authUsername | string | `"stalwart"` |  |
 | coordinator.nats.existingSecret | string | `""` |  |
+| coordinator.nats.hosts | list | `[]` |  |
 | coordinator.nats.password | string | `""` | Fallback only, stored in a chart-managed Secret and visible in Helm's release history. Prefer existingSecret. Leave both empty for no auth. |
 | coordinator.nats.passwordSecretKey | string | `"password"` |  |
 | coordinator.nats.useTls | bool | `false` |  |
@@ -500,8 +562,9 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 | email.encryptOnAppend | bool | `false` | Also encrypt client-appended (IMAP/JMAP) messages server-wide, overriding any per-account preference. Off by default so clients keep control, matching Stalwart's own default. |
 | email.provision | bool | `false` | Off by default: flipping it on reapplies the Email singleton via the same CLI apply Job used for blobStore/metrics, which requires provisioning credentials even if nothing else needs the Job. |
 | existingSecret | string | `""` | Existing Secret containing environment variables; also accepts STALWART_RECOVERY_ADMIN. |
-| extraEnv | object | `{}` | Extra environment variables injected into the container, for store credentials that live in plain text. |
-| extraEnvVars | list | `[]` | Extra environment variables for the mail container, as full Kubernetes `env` entries (for example `valueFrom.secretKeyRef`). |
+| extraEnv | object | `{}` | Extra environment variables injected into the container, for non-sensitive settings. Overrides chart-generated values; extraEnvVars takes precedence. |
+| extraEnvVars | list | `[]` | Extra environment variables as Kubernetes `env` entries (for example `valueFrom.secretKeyRef`). Overrides extraEnv and chart-generated values. Names must be unique; list order is preserved. |
+| extraInitContainers | list | `[]` | Extra init containers for the mail pod. |
 | extraSecretEnv | object | `{}` | Extra environment variables injected from the managed Secret. Use this for anything sensitive (database passwords, S3 keys, etc.). |
 | extraVolumeMounts | list | `[]` | Mounts for `extraVolumes` in the mail container. |
 | extraVolumes | list | `[]` | Extra volumes for the mail pod, for example a mounted certificate or a writable path for custom logging. |
@@ -519,13 +582,16 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 | global.defaultStorageClass | string | `""` | Default storage class when persistence.storageClass is unset. |
 | global.imagePullSecrets | list | `[]` |  |
 | global.imageRegistry | string | `""` |  |
-| hostname | string | `""` | Server hostname (SystemSettings.defaultHostname), applied by the provisioning Job; empty leaves it untouched. A new server has none, so JMAP session URLs point at the pod name. Usually the public mail host, e.g. mail.example.org. The Job then reloads the settings on the running pods. |
+| hostAliases | list | `[]` | Extra /etc/hosts entries for the mail pod, e.g. when cluster DNS does not resolve a host it must reach. |
+| hostname | string | `""` | Server hostname (SystemSettings.defaultHostname), applied by the provisioning Job; empty leaves it untouched. A new server has none, so JMAP session URLs point at the pod name. Usually the public mail host, e.g. mail.example.org. Stalwart requires a default domain with it: the Job creates mailDomain if missing and makes it the default. The reconcile Job then restarts Stalwart to apply it. |
 | image.digest | string | pinned, see values.yaml | Multi-arch index digest of the tag. Takes precedence over the tag; clear it to float on the tag instead. |
 | image.pullPolicy | string | `"IfNotPresent"` | A digest never changes, so a cached image is always the right one. |
 | image.pullSecrets | list | `[]` |  |
 | image.registry | string | `"docker.io"` |  |
 | image.repository | string | `"stalwartlabs/stalwart"` |  |
 | image.tag | string | pinned, see values.yaml | Image tag, kept in sync with the digest by Renovate. |
+| inMemoryStore.redis.url | string | `""` |  |
+| inMemoryStore.type | string | `""` |  |
 | ingress.annotations | object | `{}` |  |
 | ingress.backend | string | `"management"` | `management` (default) routes to the internal management Service: Stalwart's plain HTTP listener (management.port), with TLS ending at the controller. `mail` routes to the mail Service by each path's portName (default `https`, Stalwart's TLS listener), which needs the controller's HTTPS-upstream setting; a new server has no listener on port 80. |
 | ingress.className | string | `""` |  |
@@ -541,6 +607,7 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 | livenessProbe.timeoutSeconds | int | `5` |  |
 | logging.console.enabled | bool | `true` |  |
 | logging.console.level | string | `"info"` | error, warn, info, debug or trace. |
+| mailDomain | string | `""` | Default mail domain set together with hostname (SystemSettings.defaultDomainId), created if missing. Defaults to domain. |
 | management.annotations | object | `{}` |  |
 | management.port | int | `8080` |  |
 | management.servicePort | int | `8080` |  |
@@ -561,6 +628,7 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 | metrics.serviceMonitor.scrapeTimeout | string | `""` |  |
 | nameOverride | string | `""` | Overrides the chart name used in resource names. |
 | nodeSelector | object | `{}` | Node selector for the mail StatefulSet. |
+| oidc.acceptedAudiences | list | `[]` | Audiences accepted in a token's `aud` claim besides Stalwart's own resource identifiers, e.g. the client id an audience mapper in Keycloak adds. |
 | oidc.activate | bool | `false` | Activates this directory server-wide via the Authentication singleton's directoryId, replacing the internal directory for every protocol (IMAP, POP3, SMTP, JMAP) -- not only WebUI/JMAP -- since Stalwart has no per-protocol override. Stalwart's documentation does not confirm whether local/admin login keeps a fallback once this is set. Verify WebUI/admin access still works in a non-production environment before enabling this; leaving it false only declares the Directory object without switching any authentication over to it. |
 | oidc.claimGroups | string | `""` |  |
 | oidc.claimName | string | `"name"` |  |
@@ -568,8 +636,7 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 | oidc.enabled | bool | `false` |  |
 | oidc.issuerUrl | string | `""` |  |
 | oidc.name | string | `"keycloak"` | Short label. Also used as the Directory object's natural key (its "description" field), so re-applying doesn't create duplicates, and as the CLI-apply cross-reference for activate. |
-| oidc.requireAudience | string | `"stalwart"` |  |
-| oidc.requireScopes | list | `["openid","email"]` | A list here; rendered into Stalwart's object-of-true Set encoding. |
+| oidc.unscopedTokens | string | `"reject"` | Tokens carrying none of Stalwart's scopes (mail, contacts, calendars, files): `reject` (Stalwart's default), `interoperable` (treated as carrying those four, no management) or `full` (every permission of the account, including management; unsafe unless the audience check is strict). Tokens from a provider like Keycloak usually carry none of them. |
 | oidc.usernameDomain | string | `""` | Domain appended to claimUsername values that don't already contain "@". |
 | pdb.create | bool | `true` | Create the PodDisruptionBudget for multi-replica installs. |
 | pdb.maxUnavailable | int | `1` | Pods that may be evicted at once. Ignored when minAvailable is set. |
@@ -601,6 +668,17 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 | provisioning.image.tag | string | pinned, see values.yaml | Image tag, kept in sync with the digest by Renovate. |
 | provisioning.password | string | `""` | Fallback only, stored in a chart-managed Secret and visible in Helm's release history. Prefer existingSecret. |
 | provisioning.passwordSecretKey | string | `"password"` |  |
+| provisioning.reconcile.activeDeadlineSeconds | int | `900` | Also how long a run's lock on a system account Secret is honored by other runs. |
+| provisioning.reconcile.backoffLimit | int | `6` |  |
+| provisioning.reconcile.image.digest | string | pinned, see values.yaml | Multi-arch index digest of the tag. Takes precedence over the tag; clear it to float on the tag instead. |
+| provisioning.reconcile.image.pullPolicy | string | `"IfNotPresent"` |  |
+| provisioning.reconcile.image.pullSecrets | list | `[]` |  |
+| provisioning.reconcile.image.registry | string | `"docker.io"` |  |
+| provisioning.reconcile.image.repository | string | `"library/python"` |  |
+| provisioning.reconcile.image.tag | string | pinned, see values.yaml | Image tag, kept in sync with the digest by Renovate. |
+| provisioning.reconcile.resources.requests.cpu | string | `"20m"` |  |
+| provisioning.reconcile.resources.requests.memory | string | `"32Mi"` |  |
+| provisioning.reconcile.restartTimeoutSeconds | int | `600` | How long to wait for the restarted pods to become ready. |
 | provisioning.resources.requests.cpu | string | `"50m"` |  |
 | provisioning.resources.requests.memory | string | `"64Mi"` |  |
 | provisioning.username | string | `"admin"` |  |
@@ -653,10 +731,15 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 | startupProbe.periodSeconds | int | `10` |  |
 | startupProbe.successThreshold | int | `1` |  |
 | startupProbe.timeoutSeconds | int | `5` |  |
+| systemAccounts.accounts | list | `[]` | Accounts. Example:   - id: mailer                     # stable identifier, also marks the app passwords     name: mailer                   # account name; the address is name@domain     domain: ""                     # default: mailDomain, then domain     aliases: [no-reply]            # further local parts on the same domain     permissions: [authenticate, emailSend]   # the account's only permissions; this is the                                    # default when omitted, [] grants none     appPassword:       allowedIps: [10.0.0.0/8]     # networks the password is accepted from; include the                                    # Job's pod network when smtpCheck is enabled       permissions: [authenticate, emailSend]   # replaces the account's; omitted inherits them     secret:       create: true                 # false: an existing Secret, delegated to the Job       name: mailer-smtp       namespace: ""                # default: the release namespace       keys: [password]             # keys that hold the password |
+| systemAccounts.smtpCheck.enabled | bool | `false` |  |
+| systemAccounts.smtpCheck.host | string | `""` |  |
+| systemAccounts.smtpCheck.port | int | `587` |  |
+| systemAccounts.smtpCheck.startTls | bool | `false` |  |
 | terminationGracePeriodSeconds | int | `60` | Seconds the pod gets to shut down cleanly. Stalwart needs time to drain connections. |
 | tolerations | list | `[]` | Tolerations for the mail StatefulSet. |
 | topologySpreadConstraints | list | `[]` | Topology spread constraints for the mail StatefulSet. Use for zone-level spreading; `podAntiAffinityPreset` only covers nodes. |
-| updateStrategy.type | string | `"RollingUpdate"` |  |
+| updateStrategy | object | `{"type":"RollingUpdate"}` | RollingUpdate without a partition whenever settings are provisioned: the reconcile Job applies them by a rolling restart and waits for every pod. |
 | webmail.additionalAnnotations | object | `{}` |  |
 | webmail.additionalLabels | object | `{}` |  |
 | webmail.adminConfigReadonly | bool | `false` | Prevent admin config writes. Requires a pre-seeded admin.json; otherwise Bulwark cannot bootstrap the dashboard password. |
@@ -770,4 +853,4 @@ Bitnami Common is vendored in `charts/` and updated by Renovate together with `C
 
 ## License
 
-Copyright 2026 Thomas Kaltenstein (Sovereign Systems). Licensed under the [Apache License, Version 2.0](LICENSE); bundled third-party components are listed in [NOTICE](NOTICE). Stalwart and Bulwark are separate programs under the GNU AGPL v3 (Stalwart also under its enterprise licence); the chart deploys their images and includes none of their code.
+Copyright 2026 sovereign-systems.eu. Licensed under the [Apache License, Version 2.0](LICENSE); bundled third-party components are listed in [NOTICE](NOTICE). Stalwart and Bulwark are separate programs under the GNU AGPL v3 (Stalwart also under its enterprise licence); the chart deploys their images and includes none of their code.

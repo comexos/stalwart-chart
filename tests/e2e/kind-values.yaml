@@ -1,0 +1,54 @@
+---
+# Stalwart for tests/e2e/kind.sh: a single node on RocksDB with a plain SMTP listener on
+# 2525 for the consumers' logins, and an OIDC directory whose issuer does not exist yet, as when
+# Stalwart is installed before the identity provider.
+dataStore:
+  backend: "rocksdb"
+blobStore:
+  backend: "existing"
+persistence:
+  enabled: true
+  size: "1Gi"
+domain: "example.org"
+hostname: "mail.example.org"
+oidc:
+  enabled: true
+  activate: true
+  issuerUrl: "https://id.example.invalid/realms/test"
+  acceptedAudiences: ["webmail"]
+  unscopedTokens: "interoperable"
+recoveryAdmin:
+  enabled: true
+  existingSecret: "stalwart-admin"
+provisioning:
+  existingSecret: "stalwart-admin"
+  passwordSecretKey: "password"
+  extraPlan:
+    - "@type": "upsert"
+      object: "NetworkListener"
+      matchOn: ["name"]
+      value:
+        smtp-internal:
+          name: "smtp-internal"
+          protocol: "smtp"
+          bind: {"[::]:2525": true}
+    - "@type": "update"
+      object: "MtaStageAuth"
+      value:
+        saslMechanisms:
+          match: {"0": {if: "local_port == 2525", then: "[plain, login]"}}
+          else: "false"
+        require:
+          match: {}
+          else: "local_port != 25"
+service:
+  ports:
+    smtp-internal:
+      port: 2525
+      containerPort: 2525
+      protocol: "TCP"
+resources:
+  requests:
+    cpu: "50m"
+    memory: "256Mi"
+...

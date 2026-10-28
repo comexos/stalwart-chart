@@ -1,0 +1,205 @@
+{{- if eq (include "stalwart.provisioningEnabled" .) "true" }}
+{{- $fullname := include "stalwart.fullname" . }}
+{{- $name := printf "%s-reconcile" $fullname }}
+{{- $accounts := (include "stalwart.systemAccounts" . | fromJson).accounts }}
+{{- $secrets := include "stalwart.systemAccountSecrets" . | fromJson }}
+{{- range $accounts }}
+{{- if .secret.create }}
+{{/* Declared without data: the reconcile Job is the only writer of the credential, and Helm
+     leaves data it does not declare alone. Removed with the release like any other resource:
+     a Secret kept after an uninstall would still belong to this release, and no other release
+     could take it over. */}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .secret.name | quote }}
+  namespace: {{ .secret.namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: system-accounts
+type: Opaque
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reconcile
+automountServiceAccountToken: false
+{{- range $namespace := concat (keys $secrets) (list .Release.Namespace) | uniq | sortAlpha }}
+{{/* The Job's only Kubernetes permissions, each naming its resources (empty resourceNames would
+     grant all of them): restarting this release's StatefulSet, and the system account Secrets. */}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: reconcile
+rules:
+  {{- if eq $namespace $.Release.Namespace }}
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    resourceNames: [{{ $fullname | quote }}]
+    verbs: ["get", "patch"]
+  {{- end }}
+  {{- with get $secrets $namespace }}
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: {{ . | toJson }}
+    verbs: ["get", "update"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: reconcile
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $.Release.Namespace | quote }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reconcile
+data:
+  reconcile.py: |
+    {{- .Files.Get "files/reconcile.py" | nindent 4 }}
+  config.json: |
+    {{- $check := .Values.systemAccounts.smtpCheck }}
+    {{- dict
+      "release" .Release.Name
+      "stalwartUrl" (printf "http://%s-management:%v" $fullname .Values.management.servicePort)
+      "lockTimeoutSeconds" (int .Values.provisioning.reconcile.activeDeadlineSeconds)
+      "restart" (dict "namespace" .Release.Namespace "statefulset" $fullname "settingsHash" (include "stalwart.settingsPlan" . | sha256sum) "timeoutSeconds" (int .Values.provisioning.reconcile.restartTimeoutSeconds))
+      "smtpCheck" (ternary (dict "host" $check.host "port" (int $check.port) "startTls" $check.startTls) nil $check.enabled)
+      "accounts" $accounts
+      | toPrettyJson | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "stalwart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reconcile
+  annotations:
+    {{- with (omit .Values.additionalAnnotations "helm.sh/hook" "helm.sh/hook-weight" "helm.sh/hook-delete-policy" "argocd.argoproj.io/hook" "argocd.argoproj.io/hook-delete-policy" "argocd.argoproj.io/sync-wave") }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    # After the provisioning Job (weight/wave 0), which writes the settings and accounts.
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/sync-wave: "10"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  activeDeadlineSeconds: {{ .Values.provisioning.reconcile.activeDeadlineSeconds }}
+  backoffLimit: {{ .Values.provisioning.reconcile.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.labels.standard" (dict "customLabels" (dict "app.kubernetes.io/name" (printf "%s-reconcile" (include "stalwart.name" .))) "context" .) | nindent 8 }}
+        app.kubernetes.io/component: reconcile
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $name }}
+      # The token is mounted explicitly below: short-lived and only in this container.
+      automountServiceAccountToken: false
+      {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.provisioning.reconcile.image) "context" $) | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: reconcile
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.provisioning.reconcile.image "global" .Values.global) | quote }}
+          imagePullPolicy: {{ .Values.provisioning.reconcile.image.pullPolicy }}
+          command: ["python3", "-I", "/config/reconcile.py"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          env:
+            - name: CONFIG_FILE
+              value: /config/config.json
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: JOB_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"
+            - name: STALWART_USER
+              value: {{ .Values.provisioning.username | quote }}
+            - name: STALWART_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.provisioning.existingSecret }}
+                  name: {{ .Values.provisioning.existingSecret | quote }}
+                  key: {{ .Values.provisioning.passwordSecretKey | quote }}
+                  {{- else }}
+                  name: {{ $fullname }}-env
+                  key: provisioningPassword
+                  {{- end }}
+          resources:
+            {{- toYaml .Values.provisioning.reconcile.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: kube-api-access
+              mountPath: /var/run/secrets/stalwart
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}
+        - name: kube-api-access
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+        - name: tmp
+          emptyDir: {}
+{{- end }}

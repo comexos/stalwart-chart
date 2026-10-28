@@ -56,6 +56,12 @@ spec:
       {{- with .Values.topologySpreadConstraints }}
       topologySpreadConstraints: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.hostAliases }}
+      hostAliases: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.extraInitContainers }}
+      initContainers: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: stalwart
           image: {{ include "stalwart.image" . | quote }}
@@ -68,95 +74,7 @@ spec:
             - "--config"
             - "/etc/stalwart/config.json"
           env:
-            {{- if and .Values.recoveryAdmin.enabled .Values.recoveryAdmin.existingSecret }}
-            - name: STALWART_RECOVERY_ADMIN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.recoveryAdmin.existingSecret | quote }}
-                  key: {{ .Values.recoveryAdmin.secretKey | quote }}
-            {{- end }}
-            {{- if and .Values.metrics.enabled (or .Values.metrics.auth.existingSecret .Values.metrics.auth.password) }}
-            - name: STALWART_METRICS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  {{- if .Values.metrics.auth.existingSecret }}
-                  name: {{ .Values.metrics.auth.existingSecret | quote }}
-                  key: {{ .Values.metrics.auth.passwordSecretKey | quote }}
-                  {{- else }}
-                  name: {{ include "stalwart.fullname" . }}-env
-                  key: metricsPassword
-                  {{- end }}
-            {{- end }}
-            {{- if and (eq .Values.coordinator.type "nats") (or .Values.coordinator.nats.existingSecret .Values.coordinator.nats.password) }}
-            - name: STALWART_NATS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  {{- if .Values.coordinator.nats.existingSecret }}
-                  name: {{ .Values.coordinator.nats.existingSecret | quote }}
-                  key: {{ .Values.coordinator.nats.passwordSecretKey | quote }}
-                  {{- else }}
-                  name: {{ include "stalwart.fullname" . }}-env
-                  key: natsPassword
-                  {{- end }}
-            {{- end }}
-            {{- if eq .Values.blobStore.backend "s3" }}
-            - name: STALWART_S3_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  {{- if .Values.blobStore.s3.existingSecret }}
-                  name: {{ .Values.blobStore.s3.existingSecret | quote }}
-                  key: {{ .Values.blobStore.s3.accessKeySecretKey | quote }}
-                  {{- else }}
-                  name: {{ include "stalwart.fullname" . }}-env
-                  key: s3AccessKey
-                  {{- end }}
-            - name: STALWART_S3_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  {{- if .Values.blobStore.s3.existingSecret }}
-                  name: {{ .Values.blobStore.s3.existingSecret | quote }}
-                  key: {{ .Values.blobStore.s3.secretKeySecretKey | quote }}
-                  {{- else }}
-                  name: {{ include "stalwart.fullname" . }}-env
-                  key: s3SecretKey
-                  {{- end }}
-            {{- end }}
-            {{- if and (not .Values.config) (eq .Values.dataStore.backend "postgresql") }}
-            {{- $pgSecret := default .Values.existingSecret .Values.dataStore.postgresql.existingSecret }}
-            - name: STALWART_DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  {{- if $pgSecret }}
-                  name: {{ $pgSecret | quote }}
-                  key: {{ .Values.dataStore.postgresql.passwordSecretKey | quote }}
-                  {{- else }}
-                  name: {{ include "stalwart.fullname" . }}-env
-                  key: postgresPassword
-                  {{- end }}
-            {{- end }}
-            {{- with .Values.extraEnvVars }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
-            {{- if .Values.role }}
-            - name: STALWART_ROLE
-              value: {{ .Values.role | quote }}
-            {{- end }}
-            {{- if .Values.pushShard }}
-            - name: STALWART_PUSH_SHARD
-              value: {{ .Values.pushShard | quote }}
-            {{- end }}
-            {{- if .Values.recoveryMode.enabled }}
-            - name: STALWART_RECOVERY_MODE
-              value: "true"
-            - name: STALWART_RECOVERY_MODE_PORT
-              value: {{ .Values.recoveryMode.port | quote }}
-            - name: STALWART_RECOVERY_MODE_LOG_LEVEL
-              value: {{ .Values.recoveryMode.logLevel | quote }}
-            {{- end }}
-            {{- range $key, $value := .Values.extraEnv }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
+            {{- include "stalwart.env" . | nindent 12 }}
           {{- if or (and .Values.recoveryAdmin.enabled (not .Values.recoveryAdmin.existingSecret)) .Values.extraSecretEnv .Values.existingSecret }}
           envFrom:
             {{- if or (and .Values.recoveryAdmin.enabled (not .Values.recoveryAdmin.existingSecret)) .Values.extraSecretEnv }}
