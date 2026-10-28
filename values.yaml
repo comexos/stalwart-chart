@@ -38,11 +38,11 @@ image:
   repository: "stalwartlabs/stalwart"
   # -- Image tag, kept in sync with the digest by Renovate.
   # @default -- pinned, see values.yaml
-  tag: "v1.0.0"
+  tag: "v1.0.1"
   # -- Multi-arch index digest of the tag. Takes precedence over the tag;
   # clear it to float on the tag instead.
   # @default -- pinned, see values.yaml
-  digest: "sha256:baafeacd6cbde77acdd94af49972d41c6709e54a376df48e18a9fe3f445eb3d5"
+  digest: "sha256:b9da4df8b4efc06bc926dd6e990bdeb0ad7b9261a7c3893d74b0461a00bb389b"
   # -- A digest never changes, so a cached image is always the right one.
   pullPolicy: "IfNotPresent"
   pullSecrets: []
