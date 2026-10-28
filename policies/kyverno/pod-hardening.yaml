@@ -51,7 +51,9 @@ spec:
     - message: "The pod must use the RuntimeDefault seccomp profile."
       expression: >-
         variables.podSpec.?securityContext.?seccompProfile.?type.orValue('') == 'RuntimeDefault'
-    - message: "automountServiceAccountToken must be false; the chart grants no RBAC."
+    # A pod that needs the Kubernetes API (the system accounts Job) mounts a projected,
+    # short-lived token explicitly instead.
+    - message: "automountServiceAccountToken must be false; mount a projected token where the API is needed."
       expression: >-
         variables.podSpec.?automountServiceAccountToken.orValue(true) == false
     - message: "Host namespaces must not be shared."

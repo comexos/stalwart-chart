@@ -1,0 +1,73 @@
+---
+# A consumer of the system account for tests/e2e/kind.sh: logs in to Stalwart with
+# SMTP AUTH using the password from the Secret, and only becomes ready once that works. The
+# image placeholder is replaced by the script with the pinned image of the reconcile Job.
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "consumer"
+  namespace: "apps"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "consumer"
+  template:
+    metadata:
+      labels:
+        app: "consumer"
+    spec:
+      automountServiceAccountToken: false
+      # The test waits for replaced pods to be gone; the script does not handle SIGTERM.
+      terminationGracePeriodSeconds: 1
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: "RuntimeDefault"
+      containers:
+        - name: "consumer"
+          image: "IMAGE"
+          command: ["python3", "-u", "-c"]
+          args:
+            - |
+              import os, smtplib, time
+              address, password = os.environ["SMTP_ADDRESS"], os.environ["SMTP_PASSWORD"]
+              while True:
+                  try:
+                      with smtplib.SMTP("stalwart.mail.svc.cluster.local", 2525, timeout=10) as smtp:
+                          smtp.ehlo("consumer.example.org")
+                          smtp.login(address, password)
+                      open("/tmp/ok", "w").write("ok")
+                      print("LOGIN OK", flush=True)
+                      break
+                  except Exception as e:
+                      print(f"login failed: {e}", flush=True)
+                      time.sleep(5)
+              time.sleep(10**9)
+          env:
+            - name: "SMTP_ADDRESS"
+              value: "mailer@example.org"
+            - name: "SMTP_PASSWORD"
+              valueFrom:
+                secretKeyRef: {name: "mailer-smtp", key: "password"}
+          readinessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/ok"]
+            periodSeconds: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "32Mi"
+          volumeMounts:
+            - name: "tmp"
+              mountPath: "/tmp"
+      volumes:
+        - name: "tmp"
+          emptyDir: {}
+...

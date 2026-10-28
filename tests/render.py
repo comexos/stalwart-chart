@@ -42,6 +42,27 @@ def plan_lines(docs):
 
 
 class ChartChecks(unittest.TestCase):
+    def test_environment_override_precedence(self):
+        ref = {'secretKeyRef': {'name': 'custom', 'key': 'password'}}
+        docs = render({'role': 'imap', 'recoveryAdmin': {'enabled': True, 'existingSecret': 'admin'},
+                       'extraEnv': {'STALWART_ROLE': 'map', 'STALWART_RECOVERY_ADMIN': 'map'},
+                       'extraEnvVars': [{'name': 'STALWART_RECOVERY_ADMIN', 'valueFrom': ref},
+                                        {'name': 'BASE', 'value': 'base'},
+                                        {'name': 'STALWART_ROLE', 'value': '$(BASE)'}]})
+        env = workload(docs)['spec']['template']['spec']['containers'][0]['env']
+        names = [e['name'] for e in env]
+        self.assertEqual(len(names), len(set(names)))
+        entries = {e['name']: e for e in env}
+        self.assertEqual(entries['STALWART_RECOVERY_ADMIN'], {'name': 'STALWART_RECOVERY_ADMIN', 'valueFrom': ref})
+        self.assertEqual(entries['STALWART_ROLE']['value'], '$(BASE)')
+        self.assertLess(names.index('BASE'), names.index('STALWART_ROLE'))
+        mapped = workload(render({'role': 'imap', 'extraEnv': {'STALWART_ROLE': 'map'}}))
+        self.assertIn({'name': 'STALWART_ROLE', 'value': 'map'}, mapped['spec']['template']['spec']['containers'][0]['env'])
+
+    def test_duplicate_environment_names_rejected(self):
+        error = render({'extraEnvVars': [{'name': 'DUP', 'value': 'one'}, {'name': 'DUP', 'value': 'two'}]}, succeeds=False)
+        self.assertIn('duplicate variable', error)
+
     def test_monitor_namespace_override_is_rejected(self):
         error = render({'metrics': {'enabled': True, 'serviceMonitor': {'enabled': True, 'namespace': 'monitoring'}}}, succeeds=False)
         self.assertIn('namespace', error)
@@ -95,10 +116,10 @@ class ChartChecks(unittest.TestCase):
         self.assertEqual(container['envFrom'], [{'secretRef': {'name': 'credentials'}}])
 
     def test_recovery_ports_and_pull_secrets(self):
-        docs = render({'recoveryMode': {'enabled': True, 'port': 9090}, 'global': {'imageRegistry': 'mirror.example', 'imagePullSecrets': ['registry']}, 'image': {'digest': 'sha256:abc', 'pullSecrets': ['registry']}})
+        docs = render({'recoveryMode': {'enabled': True, 'port': 9090}, 'global': {'imageRegistry': 'mirror.example', 'imagePullSecrets': ['registry']}, 'image': {'digest': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'pullSecrets': ['registry']}})
         pod = workload(docs)['spec']['template']['spec']
         container = pod['containers'][0]
-        self.assertEqual(container['image'], 'mirror.example/stalwartlabs/stalwart@sha256:abc')
+        self.assertEqual(container['image'], 'mirror.example/stalwartlabs/stalwart@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
         self.assertEqual(pod['imagePullSecrets'], [{'name': 'registry'}])
         self.assertEqual(next(port['containerPort'] for port in container['ports'] if port['name'] == 'mgmt'), 9090)
         self.assertEqual(next(doc for doc in docs if doc['kind'] == 'Service' and doc['metadata']['name'].endswith('-headless'))['spec']['ports'][0]['port'], 9090)
@@ -257,17 +278,26 @@ class ChartChecks(unittest.TestCase):
         # Default: untouched, and no Job unless something else needs it.
         self.assertFalse(any(line['object'] == 'Coordinator' for line in plan_lines(render(base))))
 
+        redis = {'type': 'redis', 'redis': {'url': 'redis://redis:6379'}}
+
         def coordinator(values):
-            docs = render({**base, 'coordinator': values})
+            docs = render({**base, 'inMemoryStore': redis, 'coordinator': values})
             return next(line for line in plan_lines(docs) if line['object'] == 'Coordinator'), docs
+
+        # Stalwart refuses a coordinator without a shared in-memory store, so the
+        # store is applied first.
+        objects = [line['object'] for line in plan_lines(coordinator({'type': 'nats', 'nats': {'hosts': ['nats:4222']}})[1])]
+        self.assertLess(objects.index('InMemoryStore'), objects.index('Coordinator'))
+        line = next(line for line in plan_lines(coordinator({'type': 'nats', 'nats': {'hosts': ['nats:4222']}})[1]) if line['object'] == 'InMemoryStore')
+        self.assertEqual(line, {'@type': 'update', 'object': 'InMemoryStore', 'value': {'@type': 'Redis', 'url': 'redis://redis:6379'}})
 
         # NATS with an existing Secret: Set fields use the object-of-true encoding
         # and the password reaches the server through an env var reference.
-        line, docs = coordinator({'type': 'nats', 'nats': {'addresses': ['nats:4222', 'nats2:4222'], 'existingSecret': 'nats-auth', 'passwordSecretKey': 'pw'}})
+        line, docs = coordinator({'type': 'nats', 'nats': {'hosts': ['nats:4222', 'nats2:4222'], 'existingSecret': 'nats-auth', 'passwordSecretKey': 'pw'}})
         self.assertEqual(line['@type'], 'update')
         self.assertEqual(line['value'], {
             '@type': 'Nats',
-            'addresses': {'nats:4222': True, 'nats2:4222': True},
+            'hosts': {'nats:4222': True, 'nats2:4222': True},
             'useTls': False,
             'authUsername': 'stalwart',
             'authSecret': {'@type': 'EnvironmentVariable', 'variableName': 'STALWART_NATS_PASSWORD'},
@@ -277,28 +307,30 @@ class ChartChecks(unittest.TestCase):
         self.assertEqual(env['STALWART_NATS_PASSWORD']['valueFrom']['secretKeyRef'], {'name': 'nats-auth', 'key': 'pw'})
 
         # Plain-value fallback goes through the chart-managed Secret.
-        line, docs = coordinator({'type': 'nats', 'nats': {'addresses': ['nats:4222'], 'password': 'p'}})
+        line, docs = coordinator({'type': 'nats', 'nats': {'hosts': ['nats:4222'], 'password': 'p'}})
         env = {e['name']: e for e in workload(docs)['spec']['template']['spec']['containers'][0]['env']}
         self.assertEqual(env['STALWART_NATS_PASSWORD']['valueFrom']['secretKeyRef'], {'name': 'stalwart-env', 'key': 'natsPassword'})
         self.assertEqual(next(d for d in docs if d['kind'] == 'Secret' and d['metadata']['name'] == 'stalwart-env')['stringData'], {'natsPassword': 'p'})
 
         # No credentials: authSecret None, no env var.
-        line, docs = coordinator({'type': 'nats', 'nats': {'addresses': ['nats:4222']}})
+        line, docs = coordinator({'type': 'nats', 'nats': {'hosts': ['nats:4222']}})
         self.assertEqual(line['value']['authSecret'], {'@type': 'None'})
         env = [e['name'] for e in workload(docs)['spec']['template']['spec']['containers'][0]['env'] or []]
         self.assertNotIn('STALWART_NATS_PASSWORD', env)
 
         self.assertEqual(coordinator({'type': 'redis', 'redis': {'url': 'redis://redis:6379'}})[0]['value'], {'@type': 'Redis', 'url': 'redis://redis:6379'})
-        self.assertEqual(coordinator({'type': 'kafka', 'kafka': {'brokers': ['k:9092']}})[0]['value'], {'@type': 'Kafka', 'brokers': {'k:9092': True}, 'groupId': 'stalwart'})
+        self.assertEqual(coordinator({'type': 'kafka', 'kafka': {'hosts': ['k:9092']}})[0]['value'], {'@type': 'Kafka', 'hosts': {'k:9092': True}, 'groupId': 'stalwart'})
         self.assertEqual(coordinator({'type': 'zenoh', 'zenoh': {'config': '{ mode: peer }'}})[0]['value'], {'@type': 'Zenoh', 'config': '{ mode: peer }'})
 
         for invalid in [
-            {'coordinator': {'type': 'nats'}},
-            {'coordinator': {'type': 'redis'}},
-            {'coordinator': {'type': 'kafka', 'kafka': {'brokers': []}}},
-            {'coordinator': {'type': 'zenoh'}},
-            {'coordinator': {'type': 'bogus'}},
-            {'coordinator': {'type': 'redis', 'redis': {'url': 'redis://r'}}, 'provisioning': {}},  # no admin credential
+            {'inMemoryStore': redis, 'coordinator': {'type': 'nats'}},
+            {'inMemoryStore': redis, 'coordinator': {'type': 'redis'}},
+            {'inMemoryStore': redis, 'coordinator': {'type': 'kafka', 'kafka': {'hosts': []}}},
+            {'inMemoryStore': redis, 'coordinator': {'type': 'zenoh'}},
+            {'inMemoryStore': redis, 'coordinator': {'type': 'bogus'}},
+            {'inMemoryStore': redis, 'coordinator': {'type': 'redis', 'redis': {'url': 'redis://r'}}, 'provisioning': {}},  # no admin credential
+            {'coordinator': {'type': 'nats', 'nats': {'hosts': ['nats:4222']}}},  # no shared in-memory store
+            {'inMemoryStore': {'type': 'redis'}},  # no URL
         ]:
             with self.subTest(values=invalid):
                 render(invalid, succeeds=False)
@@ -368,7 +400,7 @@ class ChartChecks(unittest.TestCase):
         self.assertNotIn('behavior', hpa['spec'])
 
         # Multiple replicas need a coordinator, set here or confirmed as configured outside Helm.
-        coordinated = {**postgres, 'replicaCount': 3, 'coordinator': {'type': 'redis', 'redis': {'url': 'redis://r'}}, 'provisioning': {'existingSecret': 'admin'}}
+        coordinated = {**postgres, 'replicaCount': 3, 'inMemoryStore': {'type': 'redis', 'redis': {'url': 'redis://r'}}, 'coordinator': {'type': 'redis', 'redis': {'url': 'redis://r'}}, 'provisioning': {'existingSecret': 'admin'}}
         render(coordinated)
         for invalid in [
             {**postgres, 'replicaCount': 3},
@@ -399,17 +431,23 @@ class ChartChecks(unittest.TestCase):
         deployment = next(doc for doc in render({'webmail': {**webmail, 'strategy': {'type': 'RollingUpdate'}}}) if doc['kind'] == 'Deployment')
         self.assertEqual(deployment['spec']['strategy'], {'type': 'RollingUpdate'})
 
-        # hostname sets SystemSettings.defaultHostname and reloads, before any extraPlan lines.
+        # hostname creates the default domain (Stalwart requires one with it) and sets both in
+        # SystemSettings, before any extraPlan lines. No reload: the reconcile Job restarts.
         self.assertFalse(any(line['object'] == 'SystemSettings' for line in plan_lines(render({'provisioning': {'existingSecret': 'admin'}}))))
-        extra = {'@type': 'update', 'object': 'Http', 'value': {'useXForwarded': True}}
-        lines = plan_lines(render({'hostname': 'mail.example.org', 'provisioning': {'existingSecret': 'admin', 'extraPlan': [extra]}}))
+        extra = {'@type': 'update', 'object': 'Http', 'value': {'clientIpSource': 'xForwardedFor'}}
+        lines = plan_lines(render({'hostname': 'mail.example.org', 'domain': 'example.org', 'provisioning': {'existingSecret': 'admin', 'extraPlan': [extra]}}))
         self.assertEqual(lines[-3:], [
-            {'@type': 'update', 'object': 'SystemSettings', 'value': {'defaultHostname': 'mail.example.org'}},
-            {'@type': 'create', 'object': 'Action', 'value': {'reload-settings': {'@type': 'ReloadSettings'}}},
+            {'@type': 'upsert', 'object': 'Domain', 'matchOn': ['name'], 'value': {'default-domain': {'name': 'example.org'}}},
+            {'@type': 'update', 'object': 'SystemSettings', 'value': {'defaultHostname': 'mail.example.org', 'defaultDomainId': '#default-domain'}},
             extra,
         ])
-        # It needs provisioning credentials like every other provisioned setting.
-        render({'hostname': 'mail.example.org'}, succeeds=False)
+        self.assertFalse(any(line['object'] == 'Action' for line in lines))
+        # mailDomain takes precedence over domain.
+        lines = plan_lines(render({'hostname': 'mx.example.net', 'domain': 'example.org', 'mailDomain': 'example.net', 'provisioning': {'existingSecret': 'admin'}}))
+        self.assertEqual(next(line for line in lines if line['object'] == 'Domain')['value'], {'default-domain': {'name': 'example.net'}})
+        # It needs a domain and provisioning credentials like every other provisioned setting.
+        render({'hostname': 'mail.example.org', 'provisioning': {'existingSecret': 'admin'}}, succeeds=False)
+        render({'hostname': 'mail.example.org', 'domain': 'example.org'}, succeeds=False)
 
     def test_webmail_autoscaling_and_anti_affinity(self):
         docs = render({'webmail': {'enabled': True}})
@@ -485,11 +523,11 @@ class ChartChecks(unittest.TestCase):
         auth = next(env for env in pod['spec']['containers'][0]['env'] if env['name'] == 'STALWART_PASSWORD')
         self.assertEqual(auth['valueFrom']['secretKeyRef'], {'name': 'admin-credentials', 'key': 'password'})
         server = workload(docs)['spec']['template']['spec']['containers'][0]
-        for name in ['STALWART_S3_ACCESS_KEY', 'STALWART_S3_SECRET_KEY']:
+        for name in ['STALWART_S3_ACCESS_KEY_ID', 'STALWART_S3_SECRET_KEY']:
             self.assertEqual(next(env for env in server['env'] if env['name'] == name)['valueFrom']['secretKeyRef']['name'], 's3-credentials')
-        values['blobStore']['s3'].update({'endpoint': 'https://minio.example.org', 'customRegion': 'us-east-1'})
+        values['blobStore']['s3'].update({'custom': {'url': 'https://minio.example.org', 'region': 'us-east-1'}})
         planmap = next(doc for doc in render(values) if doc['kind'] == 'ConfigMap' and doc['metadata']['name'].endswith('-provisioning'))
-        self.assertEqual(json.loads(planmap['data']['plan.ndjson'])['value']['region'], {'@type': 'Custom', 'customEndpoint': 'https://minio.example.org', 'customRegion': 'us-east-1'})
+        self.assertEqual(json.loads(planmap['data']['plan.ndjson'])['value']['region'], {'@type': 'Custom', 'url': 'https://minio.example.org', 'region': 'us-east-1'})
         for invalid in [
             {'blobStore': {'backend': 's3'}},
             {'blobStore': {'backend': 's3', 's3': {'bucket': 'mail', 'existingSecret': 's3'}}},
@@ -501,7 +539,7 @@ class ChartChecks(unittest.TestCase):
         docs = render({
             'recoveryAdmin': {'enabled': True, 'existingSecret': 'recovery', 'secretKey': 'credential'},
             'dataStore': {'backend': 'postgresql', 'postgresql': {'host': 'db', 'existingSecret': 'postgres', 'passwordSecretKey': 'db-password'}},
-            'blobStore': {'backend': 's3', 's3': {'bucket': 'mail', 'existingSecret': 's3', 'accessKeySecretKey': 'id', 'secretKeySecretKey': 'key'}},
+            'blobStore': {'backend': 's3', 's3': {'bucket': 'mail', 'existingSecret': 's3', 'accessKeyIdSecretKey': 'id', 'secretKeySecretKey': 'key'}},
             'provisioning': {'existingSecret': 'provisioning', 'passwordSecretKey': 'admin-password', 'image': {'pullSecrets': ['cli-registry']}},
             'image': {'pullSecrets': ['server-registry']},
             'extraEnvVars': [{'name': 'OTHER_PASSWORD', 'valueFrom': {'secretKeyRef': {'name': 'other', 'key': 'password'}}}],
@@ -512,7 +550,7 @@ class ChartChecks(unittest.TestCase):
         for name, secret, key in [
             ('STALWART_RECOVERY_ADMIN', 'recovery', 'credential'),
             ('STALWART_DB_PASSWORD', 'postgres', 'db-password'),
-            ('STALWART_S3_ACCESS_KEY', 's3', 'id'),
+            ('STALWART_S3_ACCESS_KEY_ID', 's3', 'id'),
             ('STALWART_S3_SECRET_KEY', 's3', 'key'),
             ('OTHER_PASSWORD', 'other', 'password'),
         ]:
@@ -617,7 +655,10 @@ class ChartChecks(unittest.TestCase):
         oidc_value = directory_line['value']['#keycloak']
         self.assertEqual(oidc_value['@type'], 'Oidc')
         self.assertEqual(oidc_value['issuerUrl'], 'https://keycloak.example.org/realms/mail')
-        self.assertEqual(oidc_value['requireScopes'], {'openid': True, 'email': True})
+        # Stalwart's own default for tokens without its scopes, and no extra audiences.
+        self.assertEqual(oidc_value['unscopedTokens'], 'reject')
+        self.assertEqual(oidc_value['acceptedAudiences'], {})
+        self.assertNotIn('requireScopes', oidc_value)
         self.assertEqual(oidc_value['claimUsername'], 'preferred_username')
 
         # activate=true also cross-references the declared Directory from
@@ -631,6 +672,8 @@ class ChartChecks(unittest.TestCase):
                 'issuerUrl': 'https://keycloak.example.org/realms/mail',
                 'usernameDomain': 'example.org',
                 'claimGroups': 'groups',
+                'acceptedAudiences': ['webmail', 'stalwart'],
+                'unscopedTokens': 'interoperable',
             },
         })
         lines = plan_lines(docs)
@@ -638,6 +681,13 @@ class ChartChecks(unittest.TestCase):
         self.assertIn('#my-idp', directory_line['value'])
         self.assertEqual(directory_line['value']['#my-idp']['usernameDomain'], 'example.org')
         self.assertEqual(directory_line['value']['#my-idp']['claimGroups'], 'groups')
+        # Set<T> encoding on the wire.
+        self.assertEqual(directory_line['value']['#my-idp']['acceptedAudiences'], {'webmail': True, 'stalwart': True})
+        self.assertEqual(directory_line['value']['#my-idp']['unscopedTokens'], 'interoperable')
+        # The values of Stalwart 0.16 are gone, and unknown policies are refused.
+        for invalid in [{'requireAudience': 'x'}, {'requireScopes': ['openid']}, {'unscopedTokens': 'all'}]:
+            with self.subTest(values=invalid):
+                render({'provisioning': {'existingSecret': 'admin'}, 'oidc': {'enabled': True, 'issuerUrl': 'https://kc.example.org/realms/x', **invalid}}, succeeds=False)
         auth_line = next(line for line in lines if line['object'] == 'Authentication')
         self.assertEqual(auth_line, {'@type': 'update', 'object': 'Authentication', 'value': {'directoryId': '#my-idp'}})
 
@@ -784,7 +834,7 @@ class ChartChecks(unittest.TestCase):
     def test_credential_value_fallback(self):
         values = {
             'dataStore': {'backend': 'postgresql', 'postgresql': {'host': 'db', 'password': 'pg-secret'}},
-            'blobStore': {'backend': 's3', 's3': {'bucket': 'mail', 'accessKey': 'AKIA', 'secretKey': 's3-secret'}},
+            'blobStore': {'backend': 's3', 's3': {'bucket': 'mail', 'accessKeyId': 'AKIA', 'secretKey': 's3-secret'}},
             'provisioning': {'password': 'admin-secret'},
             'metrics': {'enabled': True, 'auth': {'username': 'prom', 'password': 'metrics-secret'}, 'serviceMonitor': {'enabled': True}},
         }
@@ -792,7 +842,7 @@ class ChartChecks(unittest.TestCase):
         managed = next(doc for doc in docs if doc['kind'] == 'Secret' and doc['metadata']['name'].endswith('-env'))
         self.assertEqual(managed['stringData'], {
             'postgresPassword': 'pg-secret',
-            's3AccessKey': 'AKIA',
+            's3AccessKeyId': 'AKIA',
             's3SecretKey': 's3-secret',
             'provisioningPassword': 'admin-secret',
             'metricsPassword': 'metrics-secret',
@@ -801,7 +851,7 @@ class ChartChecks(unittest.TestCase):
         env = {entry['name']: entry for entry in server['env']}
         for name, key in [
             ('STALWART_DB_PASSWORD', 'postgresPassword'),
-            ('STALWART_S3_ACCESS_KEY', 's3AccessKey'),
+            ('STALWART_S3_ACCESS_KEY_ID', 's3AccessKeyId'),
             ('STALWART_S3_SECRET_KEY', 's3SecretKey'),
             ('STALWART_METRICS_PASSWORD', 'metricsPassword'),
         ]:
@@ -824,7 +874,7 @@ class ChartChecks(unittest.TestCase):
 
         for invalid in [
             {'dataStore': {'backend': 'postgresql', 'postgresql': {'host': 'db'}}, 'blobStore': {'backend': 'existing'}},
-            {'dataStore': {'backend': 'rocksdb'}, 'blobStore': {'backend': 's3', 's3': {'bucket': 'mail', 'accessKey': 'AKIA'}}},
+            {'dataStore': {'backend': 'rocksdb'}, 'blobStore': {'backend': 's3', 's3': {'bucket': 'mail', 'accessKeyId': 'AKIA'}}},
             {'dataStore': {'backend': 'rocksdb'}, 'blobStore': {'backend': 'existing'}, 'metrics': {'enabled': True}},
         ]:
             with self.subTest(values=invalid):
@@ -930,6 +980,149 @@ class ChartChecks(unittest.TestCase):
             with self.subTest(values=values):
                 render(values, succeeds=False)
 
+
+    def test_reconcile_restart(self):
+        def reconcile(docs):
+            return {(d['kind'], d['metadata']['namespace'], d['metadata']['name']): d for d in docs if d['metadata']['name'] == 'stalwart-reconcile'}
+
+        def settings_hash(docs):
+            configmap = next(d for d in docs if d['kind'] == 'ConfigMap' and d['metadata']['name'] == 'stalwart-reconcile')
+            return json.loads(configmap['data']['config.json'])['restart']['settingsHash']
+
+        # Nothing provisioned, nothing to restart: no Job and no RBAC.
+        self.assertEqual(reconcile(render()), {})
+
+        base = {'provisioning': {'existingSecret': 'admin'}, 'hostname': 'mail.example.org', 'domain': 'example.org'}
+        docs = render(base)
+        by = reconcile(docs)
+        # The only permission without system accounts: restarting this release's StatefulSet.
+        self.assertEqual(by[('Role', 'mail', 'stalwart-reconcile')]['rules'], [
+            {'apiGroups': ['apps'], 'resources': ['statefulsets'], 'resourceNames': ['stalwart'], 'verbs': ['get', 'patch']},
+        ])
+        self.assertEqual(by[('RoleBinding', 'mail', 'stalwart-reconcile')]['subjects'],
+                         [{'kind': 'ServiceAccount', 'name': 'stalwart-reconcile', 'namespace': 'mail'}])
+        # After the provisioning Job, with a projected token instead of automounting.
+        job = by[('Job', 'mail', 'stalwart-reconcile')]
+        annotations = job['metadata']['annotations']
+        self.assertEqual((annotations['helm.sh/hook'], annotations['helm.sh/hook-weight']), ('post-install,post-upgrade', '10'))
+        self.assertEqual((annotations['argocd.argoproj.io/hook'], annotations['argocd.argoproj.io/sync-wave']), ('PostSync', '10'))
+        pod = job['spec']['template']['spec']
+        self.assertFalse(pod['automountServiceAccountToken'])
+        token = next(v for v in pod['volumes'] if v['name'] == 'kube-api-access')['projected']['sources'][0]['serviceAccountToken']
+        self.assertEqual(token['expirationSeconds'], 600)
+        self.assertIn('@sha256:', pod['containers'][0]['image'])
+        configmap = by[('ConfigMap', 'mail', 'stalwart-reconcile')]
+        self.assertEqual(configmap['data']['reconcile.py'].strip(), (ROOT / 'files' / 'reconcile.py').read_text().strip())
+        restart = json.loads(configmap['data']['config.json'])['restart']
+        self.assertEqual((restart['namespace'], restart['statefulset'], restart['timeoutSeconds']), ('mail', 'stalwart', 600))
+        # The StatefulSet itself does not carry the hash: Helm leaves the Job's annotation alone.
+        self.assertNotIn('stalwart.s7n.systems/settings', workload(docs)['spec']['template']['metadata'].get('annotations', {}))
+
+        # The hash follows the settings plan, extraPlan included, but not the system accounts.
+        first = settings_hash(docs)
+        self.assertEqual(settings_hash(render(base)), first)
+        self.assertNotEqual(settings_hash(render({**base, 'hostname': 'mx.example.org'})), first)
+        extra = {'@type': 'update', 'object': 'Http', 'value': {'clientIpSource': 'xForwardedFor'}}
+        self.assertNotEqual(settings_hash(render({**base, 'provisioning': {**base['provisioning'], 'extraPlan': [extra]}})), first)
+        account = {'id': 'mailer', 'name': 'mailer', 'secret': {'name': 'mailer-smtp'}}
+        self.assertEqual(settings_hash(render({**base, 'systemAccounts': {'accounts': [account]}})), first)
+
+    def test_system_accounts(self):
+        admin = {'provisioning': {'existingSecret': 'admin'}, 'domain': 'example.org'}
+        account = {
+            'id': 'mailer', 'name': 'mailer', 'aliases': ['no-reply'],
+            'appPassword': {'allowedIps': ['10.0.0.0/8'], 'permissions': ['authenticate', 'emailSend']},
+            'secret': {'name': 'mailer-smtp', 'namespace': 'apps', 'keys': ['password', 'OTHER_KEY']},
+        }
+        docs = render({**admin, 'systemAccounts': {'accounts': [account]}})
+        by = {(d['kind'], d['metadata'].get('namespace'), d['metadata']['name']): d for d in docs}
+
+        # The Secret is declared without data: the Job is its only writer. Not kept on uninstall,
+        # so another release can take its name over afterwards.
+        secret = by[('Secret', 'apps', 'mailer-smtp')]
+        self.assertNotIn('data', secret)
+        self.assertNotIn('stringData', secret)
+        self.assertNotIn('helm.sh/resource-policy', secret['metadata'].get('annotations') or {})
+
+        # RBAC: the named Secret in its namespace; the StatefulSet in the release namespace.
+        self.assertEqual(by[('Role', 'apps', 'stalwart-reconcile')]['rules'], [
+            {'apiGroups': [''], 'resources': ['secrets'], 'resourceNames': ['mailer-smtp'], 'verbs': ['get', 'update']},
+        ])
+        self.assertEqual(by[('RoleBinding', 'apps', 'stalwart-reconcile')]['subjects'],
+                         [{'kind': 'ServiceAccount', 'name': 'stalwart-reconcile', 'namespace': 'mail'}])
+        for doc in docs:
+            if doc['kind'] == 'Role':
+                for rule in doc['rules']:
+                    self.assertTrue(rule.get('resourceNames'), rule)
+
+        config = json.loads(by[('ConfigMap', 'mail', 'stalwart-reconcile')]['data']['config.json'])
+        self.assertEqual(config['stalwartUrl'], 'http://stalwart-management:8080')
+        self.assertIsNone(config['smtpCheck'])
+        entry = config['accounts'][0]
+        self.assertEqual(entry['address'], 'mailer@example.org')
+        self.assertEqual(entry['appPassword']['permissions'], {'@type': 'Replace', 'permissions': {'authenticate': True, 'emailSend': True}})
+        self.assertEqual(entry['secret'], {'create': True, 'name': 'mailer-smtp', 'namespace': 'apps', 'keys': ['password', 'OTHER_KEY']})
+
+        # The provisioning plan creates the domain and the account, without credentials.
+        lines = plan_lines(docs)
+        self.assertIn({'@type': 'upsert', 'object': 'Domain', 'matchOn': ['name'], 'value': {'system-domain-0': {'name': 'example.org'}}}, lines)
+        self.assertEqual(next(line for line in lines if line['object'] == 'Account')['value']['system-mailer'], {
+            '@type': 'User', 'name': 'mailer', 'domainId': '#system-domain-0', 'description': 'managed:stalwart/mailer',
+            'aliases': {'0': {'name': 'no-reply', 'domainId': '#system-domain-0', 'enable': True}},
+            'permissions': {'@type': 'Replace', 'enabledPermissions': {'authenticate': True, 'emailSend': True}},
+        })
+
+        # Defaults: the release namespace, the key "password", send-only permissions, inherited
+        # app password permissions; an existing Secret is not declared.
+        docs = render({**admin, 'systemAccounts': {'accounts': [{'id': 'bot', 'name': 'bot', 'secret': {'name': 'bot-smtp', 'create': False}}]}})
+        entry = json.loads(next(d for d in docs if d['kind'] == 'ConfigMap' and d['metadata']['name'] == 'stalwart-reconcile')['data']['config.json'])['accounts'][0]
+        self.assertEqual(entry['secret'], {'create': False, 'name': 'bot-smtp', 'namespace': 'mail', 'keys': ['password']})
+        self.assertEqual(entry['permissions'], ['authenticate', 'emailSend'])
+        self.assertEqual(entry['appPassword']['permissions'], {'@type': 'Inherit'})
+        self.assertFalse(any(d['kind'] == 'Secret' and d['metadata']['name'] == 'bot-smtp' for d in docs))
+
+        # An explicit empty list grants no permissions; only an omitted one gets the default.
+        docs = render({**admin, 'systemAccounts': {'accounts': [{'id': 'off', 'name': 'off', 'permissions': [], 'secret': {'name': 'off-smtp'}}]}})
+        account_line = next(line for line in plan_lines(docs) if line['object'] == 'Account')
+        self.assertEqual(account_line['value']['system-off']['permissions'], {'@type': 'Replace', 'enabledPermissions': {}})
+
+        # The reconcile Job restarts by rolling the StatefulSet: strategies that never complete
+        # that rollout are refused while settings are provisioned, and accepted otherwise.
+        provisioned = {**admin, 'hostname': 'mail.example.org'}
+        render({**provisioned, 'updateStrategy': {'type': 'OnDelete'}}, succeeds=False)
+        render({**provisioned, 'updateStrategy': {'type': 'RollingUpdate', 'rollingUpdate': {'partition': 1}}}, succeeds=False)
+        render({**provisioned, 'updateStrategy': {'type': 'RollingUpdate', 'rollingUpdate': {'partition': 0}}})
+        render({**admin, 'updateStrategy': {'type': 'OnDelete'}})  # nothing provisioned, no reconcile Job
+
+        def accounts(*items, **extra):
+            return {**admin, 'systemAccounts': {'accounts': list(items), **extra}}
+        for invalid in [
+            accounts(account, {**account, 'name': 'other', 'secret': {'name': 'x'}}),       # id twice
+            accounts(account, {**account, 'id': 'other', 'secret': {'name': 'x'}}),         # account name twice
+            accounts(account, {**account, 'id': 'b', 'name': 'b'}),                         # Secret twice
+            accounts({**account, 'secret': {'name': 's', 'keys': []}}),                     # no key
+            accounts({**account, 'secret': {'name': 's', 'data': {'password': 'x'}}}),      # removed setting
+            accounts({**account, 'adoption': {'mode': 'chart'}}),                           # removed setting
+            accounts({**account, 'id': 'Not_Valid'}),
+            accounts({**account, 'appPassword': {'permissions': []}}),                      # empty: say it or omit it
+            accounts({'id': 'x', 'name': 'x'}),                                             # no Secret
+            accounts(account, smtpCheck={'enabled': True}),                                 # no host
+            {'provisioning': {'existingSecret': 'admin'}, 'systemAccounts': {'accounts': [account]}},  # no domain
+            {'domain': 'example.org', 'systemAccounts': {'accounts': [account]}},           # no admin credential
+        ]:
+            with self.subTest(values=invalid):
+                render(invalid, succeeds=False)
+
+    def test_host_aliases_init_containers_and_strict_values(self):
+        pod = workload(render())['spec']['template']['spec']
+        self.assertNotIn('hostAliases', pod)
+        self.assertNotIn('initContainers', pod)
+        aliases = [{'ip': '10.0.0.1', 'hostnames': ['id.example.org']}]
+        init = [{'name': 'wait', 'image': 'busybox'}]
+        pod = workload(render({'hostAliases': aliases, 'extraInitContainers': init}))['spec']['template']['spec']
+        self.assertEqual((pod['hostAliases'], pod['initContainers']), (aliases, init))
+        # Unknown top-level keys, e.g. typos, are rejected.
+        render({'nodeSelecter': {'zone': 'a'}}, succeeds=False)
 
 if __name__ == '__main__':
     unittest.main()

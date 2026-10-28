@@ -15,16 +15,16 @@
   ],
   "customManagers": [
     {
-      "description": "Digest-pinned CI tool images in shell scripts, tracking the implicit latest tag.",
+      "description": "Tool images run by the scripts and workflows, pinned as image:tag@digest.",
       "customType": "regex",
       "managerFilePatterns": [
-        "/^scripts/(generate-docs|validate-manifests)\\.sh$/"
+        "/^scripts/.+\\.sh$/",
+        "/^\\.github/workflows/.+\\.ya?ml$/"
       ],
       "matchStrings": [
-        "(?:^|\\n)(?:image|KYVERNO|KUBECONFORM)=(?<depName>[^\\s@]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\b"
+        "(?<depName>(?:docker\\.io|ghcr\\.io|quay\\.io)/[a-z0-9._/-]+):(?<currentValue>[A-Za-z0-9._-]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
-      "datasourceTemplate": "docker",
-      "currentValueTemplate": "latest"
+      "datasourceTemplate": "docker"
     },
     {
       "description": "Container images in values.yaml: registry, repository, tag and digest in that order, kept together.",

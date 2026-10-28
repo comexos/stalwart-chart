@@ -1,0 +1,21 @@
+---
+# The system account for tests/e2e/kind.sh: its password goes into a Secret in the
+# consumer's namespace.
+systemAccounts:
+  smtpCheck:
+    enabled: true
+    host: "stalwart.mail.svc.cluster.local"
+    port: 2525
+  accounts:
+    - id: "mailer"
+      name: "mailer"
+      aliases: ["no-reply"]
+      appPassword:
+        # kind's pod network
+        allowedIps: ["10.244.0.0/16"]
+        permissions: ["authenticate", "emailSend"]
+      secret:
+        name: "mailer-smtp"
+        namespace: "apps"
+        keys: ["password"]
+...

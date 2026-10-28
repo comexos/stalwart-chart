@@ -20,8 +20,14 @@ domain: ""
 # -- Server hostname (SystemSettings.defaultHostname), applied by the
 # provisioning Job; empty leaves it untouched. A new server has none, so JMAP
 # session URLs point at the pod name. Usually the public mail host, e.g.
-# mail.example.org. The Job then reloads the settings on the running pods.
+# mail.example.org. Stalwart requires a default domain with it: the Job
+# creates mailDomain if missing and makes it the default. The reconcile Job
+# then restarts Stalwart to apply it.
 hostname: ""
+
+# -- Default mail domain set together with hostname (SystemSettings.defaultDomainId),
+# created if missing. Defaults to domain.
+mailDomain: ""
 
 # -- Existing Secret containing environment variables; also accepts STALWART_RECOVERY_ADMIN.
 existingSecret: ""
@@ -32,11 +38,11 @@ image:
   repository: "stalwartlabs/stalwart"
   # -- Image tag, kept in sync with the digest by Renovate.
   # @default -- pinned, see values.yaml
-  tag: "v0.16.27"
+  tag: "v1.0.0"
   # -- Multi-arch index digest of the tag. Takes precedence over the tag;
   # clear it to float on the tag instead.
   # @default -- pinned, see values.yaml
-  digest: "sha256:c429b311c93db5606598abc1c68225a85a6953183848ae01bee9c6a98885836c"
+  digest: "sha256:baafeacd6cbde77acdd94af49972d41c6709e54a376df48e18a9fe3f445eb3d5"
   # -- A digest never changes, so a cached image is always the right one.
   pullPolicy: "IfNotPresent"
   pullSecrets: []
@@ -116,14 +122,6 @@ recoveryMode:
   port: 8080
   logLevel: "info"
 
-# -- Extra environment variables injected into the container, for
-# store credentials that live in plain text.
-extraEnv: {}
-
-# -- Extra environment variables injected from the managed Secret.
-# Use this for anything sensitive (database passwords, S3 keys, etc.).
-extraSecretEnv: {}
-
 # Select the startup DataStore; server/blob settings still live in Stalwart's database.
 dataStore:
   backend: "postgresql" # postgresql or rocksdb
@@ -151,17 +149,20 @@ blobStore:
   backend: "s3" # s3 or existing
   s3:
     bucket: ""
-    # -- Stalwart region variant, e.g. EuCentral1. An endpoint selects Custom instead.
+    # -- Stalwart region variant, e.g. EuCentral1. Ignored when custom.url is set.
     region: "EuCentral1"
-    endpoint: ""
-    customRegion: "us-east-1"
+    # Stalwart's Custom region, for MinIO, SeaweedFS or another S3-compatible store:
+    # setting url selects it.
+    custom:
+      url: ""
+      region: "us-east-1"
     existingSecret: ""
-    accessKeySecretKey: "accessKey"
+    accessKeyIdSecretKey: "accessKeyId"
     secretKeySecretKey: "secretKey"
     # -- Fallback only, stored in a chart-managed Secret and visible in
     # Helm's release history. Prefer existingSecret. Both are required
     # together when existingSecret is not set.
-    accessKey: ""
+    accessKeyId: ""
     secretKey: ""
     keyPrefix: ""
     verifyAfterWrite: true
@@ -174,11 +175,11 @@ provisioning:
     repository: "stalwartlabs/cli"
     # -- Image tag, kept in sync with the digest by Renovate.
     # @default -- pinned, see values.yaml
-    tag: "1.0.13"
+    tag: "1.0.14"
     # -- Multi-arch index digest of the tag. Takes precedence over the tag;
     # clear it to float on the tag instead.
     # @default -- pinned, see values.yaml
-    digest: "sha256:9a1e07307d6f890a193322c4b737fc0868405f0f8486a19922cbf362f43884fd"
+    digest: "sha256:5b70732cb69cdab3ff0894c501544cf0bfa180fa75bcd0eeba4eebe04c1064e1"
     pullPolicy: "IfNotPresent"
     pullSecrets: []
   username: "admin"
@@ -196,6 +197,32 @@ provisioning:
   #   - {"@type": upsert, object: Domain, matchOn: [name], value: {main: {name: example.org}}}
   #   - {"@type": update, object: SystemSettings, value: {defaultHostname: mail.example.org, defaultDomainId: "#main"}}
   extraPlan: []
+  # After the provisioning Job: restarts Stalwart when the settings plan changed (Stalwart
+  # reads settings and binds listeners at startup) and publishes the app passwords of
+  # systemAccounts. The only part of the chart with Kubernetes permissions: get/patch on this
+  # release's StatefulSet, get/update on the system account Secrets.
+  reconcile:
+    image:
+      registry: "docker.io"
+      repository: "library/python"
+      # -- Image tag, kept in sync with the digest by Renovate.
+      # @default -- pinned, see values.yaml
+      tag: "3.15-alpine"
+      # -- Multi-arch index digest of the tag. Takes precedence over the tag;
+      # clear it to float on the tag instead.
+      # @default -- pinned, see values.yaml
+      digest: "sha256:0aa144e9ec2ae8fd80dfd94070ef3e432a0df17b6e5e0091dc05323974ce9913"
+      pullPolicy: "IfNotPresent"
+      pullSecrets: []
+    # -- How long to wait for the restarted pods to become ready.
+    restartTimeoutSeconds: 600
+    # -- Also how long a run's lock on a system account Secret is honored by other runs.
+    activeDeadlineSeconds: 900
+    backoffLimit: 6
+    resources:
+      requests:
+        cpu: "20m"
+        memory: "32Mi"
   activeDeadlineSeconds: 600
   backoffLimit: 6
   resources:
@@ -203,10 +230,43 @@ provisioning:
       cpu: "50m"
       memory: "64Mi"
 
+# System accounts for other applications, e.g. an account that only sends mail. With an
+# external directory (OIDC) an administrator cannot set an account's password; Stalwart only
+# accepts app passwords it generates itself. The provisioning Job creates the accounts, and the
+# reconcile Job (provisioning.reconcile) creates an app password per account and writes it into
+# a Secret the applications read. A new app password is only created when the recorded one no
+# longer exists in Stalwart; applications pick it up when they restart. See "System accounts"
+# in the README.
+systemAccounts:
+  # -- Accounts. Example:
+  #   - id: mailer                     # stable identifier, also marks the app passwords
+  #     name: mailer                   # account name; the address is name@domain
+  #     domain: ""                     # default: mailDomain, then domain
+  #     aliases: [no-reply]            # further local parts on the same domain
+  #     permissions: [authenticate, emailSend]   # the account's only permissions; this is the
+  #                                    # default when omitted, [] grants none
+  #     appPassword:
+  #       allowedIps: [10.0.0.0/8]     # networks the password is accepted from; include the
+  #                                    # Job's pod network when smtpCheck is enabled
+  #       permissions: [authenticate, emailSend]   # replaces the account's; omitted inherits them
+  #     secret:
+  #       create: true                 # false: an existing Secret, delegated to the Job
+  #       name: mailer-smtp
+  #       namespace: ""                # default: the release namespace
+  #       keys: [password]             # keys that hold the password
+  accounts: []
+  # Checks a new or the recorded app password with SMTP AUTH, as the applications use it. A
+  # failed check fails the run; it never creates another password.
+  smtpCheck:
+    enabled: false
+    host: ""
+    port: 587
+    startTls: false
+
 # Stalwart's log output (Tracer objects), applied by the provisioning Job. A new server only
 # logs to /var/log/stalwart, which the read-only root file system does not keep; `console`
 # logs to stdout for `kubectl logs` instead and switches that file tracer off. Stalwart reads
-# tracers at startup only: restart the pods once after the first installation or a change.
+# tracers at startup; the reconcile Job restarts it after a change.
 logging:
   console:
     enabled: true
@@ -401,7 +461,7 @@ podLabels: {}
 # -- Extra annotations on the mail pods. `checksum/config` and `checksum/secret` are reserved.
 podAnnotations: {}
 
-# Dedicated ServiceAccount. API token automounting is off, and the chart grants no RBAC.
+# Dedicated ServiceAccount of the Stalwart pods. No API token is mounted and it has no RBAC.
 serviceAccount:
   create: true
   name: ""
@@ -479,11 +539,14 @@ oidc:
   # duplicates, and as the CLI-apply cross-reference for activate.
   name: "keycloak"
   issuerUrl: ""
-  requireAudience: "stalwart"
-  # -- A list here; rendered into Stalwart's object-of-true Set encoding.
-  requireScopes:
-    - "openid"
-    - "email"
+  # -- Audiences accepted in a token's `aud` claim besides Stalwart's own resource identifiers,
+  # e.g. the client id an audience mapper in Keycloak adds.
+  acceptedAudiences: []
+  # -- Tokens carrying none of Stalwart's scopes (mail, contacts, calendars, files):
+  # `reject` (Stalwart's default), `interoperable` (treated as carrying those four, no
+  # management) or `full` (every permission of the account, including management; unsafe unless
+  # the audience check is strict). Tokens from a provider like Keycloak usually carry none of them.
+  unscopedTokens: "reject"
   claimUsername: "preferred_username"
   # -- Domain appended to claimUsername values that don't already contain "@".
   usernameDomain: ""
@@ -522,7 +585,7 @@ coordinator:
   # other's mailbox changes, IMAP IDLE/push and blocked-IP events.
   externallyManaged: false
   nats:
-    addresses: []
+    hosts: []
     useTls: false
     authUsername: "stalwart"
     existingSecret: ""
@@ -535,10 +598,23 @@ coordinator:
   redis:
     url: ""
   kafka:
-    brokers: []
+    hosts: []
     groupId: "stalwart"
   zenoh:
     config: ""
+
+# In-memory store for caches, rate limits, locks and lookups. A single replica
+# uses Stalwart's local in-process store. Several replicas must share a
+# Redis-compatible store (Redis or Valkey), and Stalwart refuses a coordinator
+# without one. type "" (default) leaves the InMemoryStore singleton untouched;
+# "redis" applies it on every install/upgrade, before the coordinator. The
+# chart does not deploy Redis.
+inMemoryStore:
+  type: ""
+  # Stalwart's plain Redis variant has no credential field: a password in the
+  # URL would be stored in Stalwart's database in clear text.
+  redis:
+    url: ""
 
 # Bulwark (https://bulwarkmail.org): an optional, separate JMAP
 # webmail client deployed alongside Stalwart as its own Deployment.
@@ -553,11 +629,11 @@ webmail:
     repository: "bulwarkmail/webmail"
     # -- Image tag, kept in sync with the digest by Renovate.
     # @default -- pinned, see values.yaml
-    tag: "1.14.2"
+    tag: "1.18.0"
     # -- Multi-arch index digest of the tag. Takes precedence over the tag;
     # clear it to float on the tag instead.
     # @default -- pinned, see values.yaml
-    digest: "sha256:9885a046afab5054719004b885bd821d164f0d4e50a21100b96595b0400e0403"
+    digest: "sha256:a985e7e40eccc70f7c7dc5d6eceaf3429ab3b644a6cf58deb240a04d39a77738"
     pullPolicy: "IfNotPresent"
     pullSecrets: []
 
@@ -820,6 +896,8 @@ terminationGracePeriodSeconds: 60
 # means deleting the StatefulSet (e.g. --cascade=orphan) and upgrading.
 podManagementPolicy: "OrderedReady"
 # StatefulSet update strategy. Rolling updates by default.
+# -- RollingUpdate without a partition whenever settings are provisioned: the reconcile Job
+# applies them by a rolling restart and waits for every pod.
 updateStrategy:
   type: "RollingUpdate"
 # -- Node selector for the mail StatefulSet.
@@ -834,12 +912,25 @@ podAntiAffinityPreset: ""
 tolerations: []
 # -- Topology spread constraints for the mail StatefulSet. Use for zone-level spreading; `podAntiAffinityPreset` only covers nodes.
 topologySpreadConstraints: []
-# -- Extra environment variables for the mail container, as full Kubernetes `env` entries (for example `valueFrom.secretKeyRef`).
+# -- Extra environment variables injected into the container, for
+# non-sensitive settings. Overrides chart-generated values; extraEnvVars takes precedence.
+extraEnv: {}
+
+# -- Extra environment variables injected from the managed Secret.
+# Use this for anything sensitive (database passwords, S3 keys, etc.).
+extraSecretEnv: {}
+
+# -- Extra environment variables as Kubernetes `env` entries (for example `valueFrom.secretKeyRef`). Overrides extraEnv and chart-generated values. Names must be unique; list order is preserved.
 extraEnvVars: []
 # -- Extra volumes for the mail pod, for example a mounted certificate or a writable path for custom logging.
 extraVolumes: []
 # -- Mounts for `extraVolumes` in the mail container.
 extraVolumeMounts: []
+# -- Extra init containers for the mail pod.
+extraInitContainers: []
+# -- Extra /etc/hosts entries for the mail pod, e.g. when cluster DNS does not resolve a host it
+# must reach.
+hostAliases: []
 # -- Lifecycle hooks for the mail container.
 lifecycleHooks: {}
 ...
